@@ -150,3 +150,11 @@ test('LogoScanEdgeAreaPolicyTests', logo_scan_edge_area_policy_tests,
   suite : 'native',
   timeout : 30,
 )
+
+# 対象PCMの配置はTS読込から分けて直接検査する。
+nicojk_align_audio_tests = executable('NicoJKAlignAudioTests',
+  'NicoJKAlignAudioTests.cpp', '../../Amatsukaze/NicoJKAlignPCM.cpp', '../../Amatsukaze/StringUtils.cpp',
+  include_directories : amatsukaze_include_dirs,
+  dependencies : common_dep, install : false,
+)
+test('NicoJKAlignAudioTests', nicojk_align_audio_tests, suite : 'native', timeout : 60)

@@ -20,9 +20,9 @@
 #if defined(_WIN32) || defined(_WIN64)
 #define AMATSUKAZECLI_HELP_NICOASS_LINE _T("  --nicoass <パス>     NicoConvASSへのパス\n")
 #else
-#define AMATSUKAZECLI_HELP_NICOASS_LINE _T("  --nicoass <パス>     nicojk_ass.pyへのパス（互換オプション）\n")
+#define AMATSUKAZECLI_HELP_NICOASS_LINE _T("  --nicoass <パス>     nicojk_assへのパス（互換オプション）\n")
 #endif
-#define AMATSUKAZECLI_HELP_NICOJKASS_LINE _T("  --nicojkass <パス>   nicojk_ass.pyへのパス\n")
+#define AMATSUKAZECLI_HELP_NICOJKASS_LINE _T("  --nicojkass <パス>   nicojk_assの実行ファイル(.pyならPythonで実行)へのパス\n")
 
 static void printCopyright() {
     PRINTF(
@@ -147,6 +147,18 @@ static void printHelp(const tchar* bin) {
         "                      4 : CMのみ出力\n"
         "                      8 : 前後のCMのみカット\n"
         "                      ORも可 例) 6: 本編とCMを分離\n"
+        "  --nicojk-ref <パス> 基準録画の音声に照合して実況を付ける\n"
+        "  --nicojk-ref-sid <ID> 基準録画のサービスID\n"
+        "  --nicojk-ref-mode replace|merge 基準のみ/対象の実況と統合[replace]\n"
+        "  --nicojk-alt replace|merge 先行放送のコメントを探して使う(アニメなど。\n"
+        "                      取得元の指定があればそちらを優先)\n"
+        "  --nicojk-dump-dir <フォルダ> 実況の調査用に、対象の音声・本編の区間・\n"
+        "                      nicojk_assのレポートなどを残す\n"
+        "  --nicojk-file <パス> xml/jklのコメントを使用する\n"
+        "  --nicojk-channel <jkN> 取得先チャンネル\n"
+        "  --nicojk-start <時刻> コメント基準(UNIX秒/ISO8601/JST14桁)\n"
+        "  --nicojk-offset <秒> 正の値でコメントを遅らせる\n"
+        "  --nicojk-program-start <時刻> 録画番組開始時刻\n"
         "  --nicojklog         ニコニコ実況コメントをNicoJKログフォルダから取得\n"
         "                      (NicoConvASSを -nicojk 1 で呼び出します)\n"
         "  --nicojkmask <数値> ニコニコ実況コメントマスク[1]\n"
@@ -284,8 +296,9 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
     conf.nicoJKAssPath = _T("");
 #else
     conf.nicoConvAssPath = _T("");
-    // Linux: Python スクリプト nicojk_ass.py を使用
-    conf.nicoJKAssPath = _T("nicojk_ass.py");
+    // Linux: 同梱の実行ファイル nicojk_ass を使用
+    // カレントディレクトリの同名フォルダと取り違えないよう、実行モジュールのフォルダを明示する
+    conf.nicoJKAssPath = moduleDir + _T("/nicojk_ass") + exeAppendix;
 #endif
     conf.muxerPath = _T("muxer") + exeAppendix;
     conf.nicoConvChSidPath = _T("ch_sid.txt");
@@ -617,9 +630,38 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
 #if defined(_WIN32) || defined(_WIN64)
             conf.nicoConvAssPath = pathNormalize(getParam(argc, argv, i++));
 #else
-            // Linux では旧オプションも Python スクリプト指定として扱う
+            // Linux では旧オプションも nicojk_ass の指定として扱う
             conf.nicoJKAssPath = pathNormalize(getParam(argc, argv, i++));
 #endif
+        } else if (key == _T("--nicojk-ref")) {
+            conf.nicoJKSource.ref = pathNormalize(getParam(argc, argv, i++));
+            if (conf.nicoJKSource.ref.empty()) THROW(ArgumentException, "基準録画が空です");
+            conf.nicoJKSource.specified = true;
+        } else if (key == _T("--nicojk-ref-sid")) {
+            const int sid = parseIntOption(key, getParam(argc, argv, i++));
+            if (sid <= 0 || sid > 65535) THROW(ArgumentException, "基準のサービスIDが不正です");
+            conf.nicoJKSource.refSid = sid;
+        } else if (key == _T("--nicojk-ref-mode")) {
+            conf.nicoJKSource.refMode = ParseNicoJKRefMode(getParam(argc, argv, i++));
+        } else if (key == _T("--nicojk-alt")) {
+            conf.nicoJKSource.alt = ParseNicoJKRefMode(getParam(argc, argv, i++));
+        } else if (key == _T("--nicojk-dump-dir")) {
+            conf.nicoJKSource.dumpDir = pathNormalize(getParam(argc, argv, i++));
+        } else if (key == _T("--nicojk-file")) {
+            conf.nicoJKSource.file = pathNormalize(getParam(argc, argv, i++));
+            if (conf.nicoJKSource.file.empty()) THROW(ArgumentException, "実況ファイルが空です");
+            conf.nicoJKSource.specified = conf.nicoJKSource.strictFile = true;
+        } else if (key == _T("--nicojk-channel")) {
+            conf.nicoJKSource.channel = ParseNicoJKChannel(getParam(argc, argv, i++));
+            conf.nicoJKSource.specified = true;
+        } else if (key == _T("--nicojk-start")) {
+            conf.nicoJKSource.start = ParseNicoJKTime(getParam(argc, argv, i++));
+            conf.nicoJKSource.specified = true;
+        } else if (key == _T("--nicojk-offset")) {
+            conf.nicoJKSource.offset = ParseNicoJKOffset(getParam(argc, argv, i++));
+            conf.nicoJKSource.specified = true;
+        } else if (key == _T("--nicojk-program-start")) {
+            conf.nicoJKSource.programStart = ParseNicoJKTime(getParam(argc, argv, i++));
         } else if (key == _T("--nicojkass")) {
             conf.nicoJKAssPath = pathNormalize(getParam(argc, argv, i++));
         } else if (key == _T("--webvtt")) {
@@ -701,6 +743,7 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
         }
     }
 
+    ValidateNicoJKReference(conf.nicoJKSource);
     if (!nicojk) {
         conf.nicojkmask = 0;
     }
@@ -816,12 +859,19 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
             conf.nicoConvAssPath = search(conf.nicoConvAssPath);
         }
         if (!conf.nicoJKAssPath.empty()) {
-            conf.nicoJKAssPath = pathNormalize(conf.nicoJKAssPath);
+            const auto script = search(conf.nicoJKAssPath);
+            conf.nicoJKAssPath = pathNormalize(GetFullPathFrom(script.c_str(),
+                File::exists(script) ? nullptr : GetModuleDirectory().c_str()));
         }
         // ch_sid.txt は実際に使用する変換ツールと同じディレクトリに配置
+        // (nicojk_ass は exe_files 直下にあるが、.py を開発用に指定したときの場所にも対応して1つ上も探す)
         const auto& nicoJKToolPath = !conf.nicoJKAssPath.empty()
             ? conf.nicoJKAssPath : conf.nicoConvAssPath;
-        conf.nicoConvChSidPath = pathGetDirectory(nicoJKToolPath) + _T("/ch_sid.txt");
+        const auto toolDir = pathGetDirectory(pathNormalize(GetFullPathFrom(nicoJKToolPath.c_str())));
+        conf.nicoConvChSidPath = toolDir + _T("/ch_sid.txt");
+        if (!File::exists(conf.nicoConvChSidPath) && File::exists(toolDir + _T("/../ch_sid.txt"))) {
+            conf.nicoConvChSidPath = pathNormalize(toolDir + _T("/../ch_sid.txt"));
+        }
         conf.mp4boxPath = search(conf.mp4boxPath);
         conf.mkvmergePath = search(conf.mkvmergePath);
         conf.muxerPath = search(conf.muxerPath);
@@ -845,7 +895,7 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
 }
 
 // ネイティブ単体テスト用: parseArgsの結果を「キー=値」の改行区切りテキストにして返す。
-// 実行ファイル位置やPATH探索に依存する既定値は含めず、引数で明示した値と固定の既定値だけを出す。
+// 明示値と固定の既定値に加え、実況ツールとチャンネル表の解決済みパスを出す。
 // 作業ディレクトリはgetTmpDirが一時ディレクトリの作成を要するため含めない。
 // 成功時0、Amatsukaze例外 (引数の拒否。数値や種別の不正を含む) 時1、想定外の例外時2、
 // 引数不正時-1、出力バッファ不足時-2 (outputLengthに終端を除く必要文字数) を返す。
@@ -899,6 +949,19 @@ extern "C" AMATSUKAZE_API int ParseCommandLineForTest(int argc, const tchar* con
         addInt(_T("audio_bitrate"), setting->getAudioBitrateInKbps());
         addInt(_T("max_frames"), setting->getMaxFrames());
         addInt(_T("nicojk_mask"), setting->getNicoJKMask());
+        const auto& source = setting->getNicoJKSource();
+        add(_T("nicojk_file"), source.file);
+        add(_T("nicojk_ass_path"), setting->getNicoJKAssPath());
+        add(_T("nicojk_ch_sid_path"), setting->getNicoConvChSidPath());
+        add(_T("nicojk_ref"), source.ref);
+        add(_T("nicojk_ref_mode"), source.refMode.empty() ? _T("replace") : source.refMode);
+        add(_T("nicojk_ref_sid"), source.refSid ? StringFormat(_T("%d"), *source.refSid) : _T(""));
+        add(_T("nicojk_alt"), source.alt);
+        add(_T("nicojk_dump_dir"), source.dumpDir);
+        add(_T("nicojk_channel"), source.channel ? StringFormat(_T("%d"), *source.channel) : _T(""));
+        add(_T("nicojk_start"), source.start ? StringFormat(_T("%.6f"), *source.start) : _T(""));
+        add(_T("nicojk_program_start"), source.programStart ? StringFormat(_T("%.6f"), *source.programStart) : _T(""));
+        add(_T("nicojk_offset"), source.offset ? StringFormat(_T("%.6f"), *source.offset) : _T(""));
         addInt(_T("print_prefix"), setting->getPrintPrefix());
         addInt(_T("sar_x"), setting->getUserSAR().first);
         addInt(_T("sar_y"), setting->getUserSAR().second);
@@ -955,6 +1018,8 @@ static void amatsukaze_av_log_callback(
     }
 }
 
+int NicoJKWavMain(AMTContext& ctx, const ConfigWrapper& setting);
+
 static int amatsukazeTranscodeMain(AMTContext& ctx, const ConfigWrapper& setting) {
     try {
 
@@ -975,6 +1040,8 @@ static int amatsukazeTranscodeMain(AMTContext& ctx, const ConfigWrapper& setting
         else if (mode == _T("probe_audio"))
             detectAudioMain(ctx, setting);
 
+        else if (mode == _T("nicojk_wav"))
+            return NicoJKWavMain(ctx, setting);
         else if (mode == _T("test_print_crc"))
             return test::PrintCRCTable(ctx, setting);
         else if (mode == _T("test_crc"))

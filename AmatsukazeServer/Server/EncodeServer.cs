@@ -1451,11 +1451,28 @@ namespace Amatsukaze.Server
                 if (!Util.IsServerLinux())
                     setting.NicoConvASSPath = GetExePath(basePath, "NicoConvASS");
             }
+            // nicojk_assは exe_files/nicojk_ass(.exe) に置く。
+            // 古い版の設定は nicojk_ass.py(実行モジュールと同じフォルダ、または nicojk_ass/ の下)や nicojk_ass/nicojk_ass(.exe) を指しているので、
+            // そのファイルがなくなっていれば新しい既定値に直す。
+            var nicoJKAssExeName = Util.IsServerWindows() ? "nicojk_ass.exe" : "nicojk_ass";
+            var nicoJKAssDefaultPath = Path.Combine(basePath, nicoJKAssExeName);
+            if (!string.IsNullOrEmpty(setting.NicoJKAssPath)
+                && !File.Exists(setting.NicoJKAssPath)
+                && File.Exists(nicoJKAssDefaultPath))
+            {
+                var pathComparison = Util.IsServerWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+                var fullPath = Path.GetFullPath(setting.NicoJKAssPath);
+                if (string.Equals(fullPath, Path.GetFullPath(Path.Combine(basePath, "nicojk_ass.py")), pathComparison)
+                    || string.Equals(fullPath, Path.GetFullPath(Path.Combine(basePath, "nicojk_ass", "nicojk_ass.py")), pathComparison)
+                    || string.Equals(fullPath, Path.GetFullPath(Path.Combine(basePath, "nicojk_ass", nicoJKAssExeName)), pathComparison))
+                {
+                    setting.NicoJKAssPath = nicoJKAssDefaultPath;
+                }
+            }
             if (string.IsNullOrEmpty(setting.NicoJKAssPath))
             {
-                var nicoJKAssPath = Path.Combine(basePath, "nicojk_ass.py");
-                if (File.Exists(nicoJKAssPath))
-                    setting.NicoJKAssPath = nicoJKAssPath;
+                if (File.Exists(nicoJKAssDefaultPath))
+                    setting.NicoJKAssPath = nicoJKAssDefaultPath;
             }
             if (string.IsNullOrEmpty(setting.SCRenamePath))
             {
@@ -2054,6 +2071,23 @@ namespace Amatsukaze.Server
             }
         }
 
+        // アニメ(ARIBのジャンル大分類7)で、プロファイルが先行放送のコメントを使う設定のときの--nicojk-altの値
+        internal static string GetNicoJKAltMode(ProfileSetting profile, IEnumerable<GenreItem> genre)
+        {
+            if (!profile.EnableNicoJK || profile.NicoJKReferenceMode is not (1 or 2)) return null;
+            if (genre?.Any(g => g.Space == (int)GenreSpace.ARIB && g.Level1 == 7) != true) return null;
+            return profile.NicoJKReferenceMode == 1 ? "replace" : "merge";
+        }
+
+        internal static string GetNicoJKProgramStartArgument(bool enabled, DateTime programStart)
+        {
+            if (!enabled || programStart <= new DateTime(2000, 1, 1)) return "";
+            // EITの年月日時分秒は実行環境のタイムゾーンにかかわらずJSTとして扱う。
+            var jst = DateTime.SpecifyKind(programStart, DateTimeKind.Unspecified);
+            var unixTime = new DateTimeOffset(jst, TimeSpan.FromHours(9)).ToUnixTimeSeconds();
+            return " --nicojk-program-start " + unixTime.ToString(CultureInfo.InvariantCulture);
+        }
+
         internal string MakeAmatsukazeArgs(
             ProcMode mode,
             ProfileSetting profile,
@@ -2063,7 +2097,7 @@ namespace Amatsukaze.Server
             VideoStreamFormat streamFormat,
             int serviceId, string[] logofiles,
             bool ignoreNoLogo, string jlscommand, string jlsopt, string ceopt, string trimavs, string divfile, string resumeDir, string batDir,
-            string inHandle, string outHandle, int pid)
+            string inHandle, string outHandle, int pid, DateTime programStart = default, string nicoJKAlt = null)
         {
             if ((mode != ProcMode.CMCheck && mode != ProcMode.TrimAdjust) && mode != ProcMode.DrcsCheck && profile != null)
             {
@@ -2325,6 +2359,7 @@ namespace Amatsukaze.Server
                     if (profile.EnableNicoJK)
                     {
                         sb.Append(" --nicojk");
+                        sb.Append(GetNicoJKProgramStartArgument(profile.EnableNicoJK, programStart));
                         if (profile.IgnoreNicoJKError)
                         {
                             sb.Append(" --ignore-nicojk-error");
@@ -2337,6 +2372,11 @@ namespace Amatsukaze.Server
                             .Append(profile.NicoJKFormatMask);
                         var useNicoConvAss = !Util.IsServerLinux()
                             && !string.IsNullOrEmpty(setting.NicoConvASSPath);
+                        // 先行放送のコメントは、nicojk_assを使うときだけ意味がある(手動の指定の有無はCLIが見る)
+                        if (!useNicoConvAss && !string.IsNullOrEmpty(nicoJKAlt))
+                        {
+                            sb.Append(" --nicojk-alt ").Append(nicoJKAlt);
+                        }
                         sb.Append(useNicoConvAss ? " --nicoass \"" : " --nicojkass \"")
                             .Append(useNicoConvAss ? setting.NicoConvASSPath : setting.NicoJKAssPath)
                             .Append("\"");
@@ -2786,7 +2826,7 @@ namespace Amatsukaze.Server
             CheckPath("ChapterExe", setting.ChapterExePath);
             CheckPath("JoinLogoScp", setting.JoinLogoScpPath);
             CheckPath("NicoConvAss", setting.NicoConvASSPath);
-            CheckPath("nicojk_ass.py", setting.NicoJKAssPath);
+            CheckPath("nicojk_ass", setting.NicoJKAssPath);
             CheckPath("tsMuxeR", setting.TsMuxeRPath);
             CheckPath("SCRename.vbs", setting.SCRenamePath);
             CheckPath("AutoVfr.exe", setting.AutoVfrPath);
@@ -2928,15 +2968,17 @@ namespace Amatsukaze.Server
                 {
                     if (Util.IsServerLinux() && string.IsNullOrEmpty(setting.NicoJKAssPath))
                     {
-                        throw new ArgumentException("nicojk_ass.pyパスが設定されていません");
+                        throw new ArgumentException("nicojk_assパスが設定されていません");
                     }
                     if (!Util.IsServerLinux()
                         && string.IsNullOrEmpty(setting.NicoConvASSPath)
                         && string.IsNullOrEmpty(setting.NicoJKAssPath))
                     {
-                        throw new ArgumentException("NicoConvASSまたはnicojk_ass.pyのパスが設定されていません");
+                        throw new ArgumentException("NicoConvASSまたはnicojk_assのパスが設定されていません");
                     }
+                    // exeは直接起動するので、Pythonが要るのは.pyを指定したときだけ
                     if (!string.IsNullOrEmpty(setting.NicoJKAssPath)
+                        && setting.NicoJKAssPath.EndsWith(".py", StringComparison.OrdinalIgnoreCase)
                         && (Util.IsServerLinux() || string.IsNullOrEmpty(setting.NicoConvASSPath)))
                     {
                         PythonExecutableResolver.ResolveOrThrow("nicojk_ass.py");

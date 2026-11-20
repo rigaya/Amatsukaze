@@ -1715,20 +1715,6 @@ void DoBadThing() {
 
     NicoJK nicoJK(ctx, setting);
     bool nicoOK = false;
-    if (!isNoEncode && setting.isNicoJKEnabled()) {
-        ctx.info(_T("[ニコニコ実況コメント取得]"));
-        auto srcDuration = reformInfo.getInDuration() / MPEG_CLOCK_HZ;
-        nicoOK = nicoJK.makeASS(serviceId, startTime, (int)srcDuration);
-        if (nicoOK) {
-            reformInfo.SetNicoJKList(nicoJK.getDialogues());
-        } else {
-            if (nicoJK.isFail() == false) {
-                ctx.info(_T("対応チャンネルがありません"));
-            } else if (setting.isIgnoreNicoJKError() == false) {
-                THROW(RuntimeException, "ニコニコ実況コメント取得に失敗");
-            }
-        }
-    }
 
     int numVideoFiles = reformInfo.getNumVideoFile();
     int mainFileIndex = reformInfo.getMainVideoFileIndex();
@@ -1886,6 +1872,29 @@ void DoBadThing() {
             }
         }
         return; // CM解析のみならここで終了
+    }
+
+    // 実況は、本編の区間(CM解析の結果)をnicojk_assへ渡すため、ロゴ・CM解析の後で取得する。
+    if (setting.isNicoJKEnabled()) {
+        ctx.info(_T("[ニコニコ実況コメント取得]"));
+        auto srcDuration = reformInfo.getInDuration() / MPEG_CLOCK_HZ;
+        const std::vector<int>* mainTrims = nullptr;
+        if (numVideoFiles == 1) {
+            mainTrims = &cmanalyze[0]->getTrims();
+        } else if (!cmanalyze[mainFileIndex]->getTrims().empty()) {
+            // 中間ファイルが複数ある録画は、Trimを同じ原点の秒に直せるか確かめていないため、区間を渡さない
+            ctx.warn(_T("映像の形式が途中で変わる録画のため、実況へ本編の区間を渡しません"));
+        }
+        nicoOK = nicoJK.makeASS(serviceId, startTime, (int)srcDuration, &reformInfo, mainTrims);
+        if (nicoOK) {
+            reformInfo.SetNicoJKList(nicoJK.getDialogues());
+        } else {
+            if (nicoJK.isFail() == false) {
+                ctx.info(_T("対応チャンネルがありません"));
+            } else if (setting.isIgnoreNicoJKError() == false) {
+                THROW(RuntimeException, "ニコニコ実況コメント取得に失敗");
+            }
+        }
     }
 
     auto audioDiffInfo = reformInfo.genAudio(setting.getCMTypes(), cmCutOffsetFrames);

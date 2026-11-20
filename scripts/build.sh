@@ -355,18 +355,6 @@ if [ "${BUILD_NATIVE}" = "true" ]; then
     install -D -t "${INSTALL_DIR}/exe_files" "${BUILD_DIR}/build_ffnk/AmatsukazeGenLogo/AmatsukazeGenLogo"
     install -D -t "${INSTALL_DIR}/exe_files" "${BUILD_DIR}/build_ffnk/Amatsukaze/libAmatsukaze.so"
     install -D -t "${INSTALL_DIR}/exe_files" "${BUILD_DIR}/build_ff612/Amatsukaze/libAmatsukaze2.so"
-    # ニコニコ実況コメント取得・ASS変換スクリプト（Linux用）
-    install -m 755 -D -t "${INSTALL_DIR}/exe_files" ./scripts/nicojk_ass.py
-    # danmaku2ass（コメントXML→ASS変換、GPL-3.0）: なければダウンロード
-    DANMAKU2ASS_COMMIT="ced881747670c2eb1c0dbd292c2a567f444b056a"
-    DANMAKU2ASS_PATH="${INSTALL_DIR}/exe_files/danmaku2ass.py"
-    if [ ! -s "${DANMAKU2ASS_PATH}" ]; then
-        echo "danmaku2ass.py をダウンロードします..."
-        wget -q "https://raw.githubusercontent.com/m13253/danmaku2ass/${DANMAKU2ASS_COMMIT}/danmaku2ass.py" \
-            -O "${DANMAKU2ASS_PATH}" || { rm -f "${DANMAKU2ASS_PATH}"; echo "danmaku2ass.py のダウンロードに失敗しました"; exit 1; }
-        chmod 755 "${DANMAKU2ASS_PATH}"
-    fi
-
     # アーカイブ展開用 7-Zip CLI（静的リンク版）
     SEVENZIP_DIR="${INSTALL_DIR}/exe_files/7z"
     SEVENZIP_PATH="${SEVENZIP_DIR}/7zzs"
@@ -400,6 +388,42 @@ if [ "${BUILD_NATIVE}" = "true" ]; then
         echo "7-Zip CLI ${SEVENZIP_VER} は配置済みです。"
     fi
     chmod 755 "${SEVENZIP_PATH}" || { echo "7-Zip CLI に実行権限を設定できませんでした"; exit 1; }
+
+    # ニコニコ実況コメント取得・ASS変換ツール nicojk_ass(別リポジトリ。danmaku2assを同梱している)
+    # リリースの単一のexeのzipをダウンロードして exe_files/nicojk_ass に置く。
+    # ライセンスなどは exe_files/license/nicojk_ass/ に置く。
+    # 版とリポジトリは nicojk_ass_version.txt に書く。NICOJK_ASS_ZIP にローカルのzipを指定すると、ダウンロードの代わりに使う。
+    # 旧版の exe_files/nicojk_ass.py と exe_files/danmaku2ass.py は使わなくなったので取り除く
+    rm -f "${INSTALL_DIR}/exe_files/nicojk_ass.py" "${INSTALL_DIR}/exe_files/danmaku2ass.py"
+    . "${PROJECT_ROOT}/nicojk_ass_version.txt"
+    NICOJK_ASS_DEST="${INSTALL_DIR}/exe_files/nicojk_ass"
+    NICOJK_ASS_LICENSE_DIR="${INSTALL_DIR}/exe_files/license/nicojk_ass"
+    NICOJK_ASS_TMP="$(mktemp -d "${BUILD_DIR}/nicojk_ass.XXXXXX")" || exit 1
+    NICOJK_ASS_ZIP_PATH="${NICOJK_ASS_ZIP:-}"
+    if [ -z "${NICOJK_ASS_ZIP_PATH}" ]; then
+        NICOJK_ASS_ZIP_PATH="${NICOJK_ASS_TMP}/nicojk_ass.zip"
+        NICOJK_ASS_URL="${NICOJK_ASS_REPO}/releases/download/${NICOJK_ASS_VERSION}/nicojk_ass-${NICOJK_ASS_VERSION}-linux-${LINUX_ARCH}.zip"
+        echo "nicojk_ass ${NICOJK_ASS_VERSION} をダウンロードします: ${NICOJK_ASS_URL}"
+        curl -fL --retry 3 --retry-delay 10 -o "${NICOJK_ASS_ZIP_PATH}" "${NICOJK_ASS_URL}" \
+            || { echo "nicojk_ass のダウンロードに失敗しました"; rm -rf "${NICOJK_ASS_TMP}"; exit 1; }
+    fi
+    # zipの展開には、上で配置した 7-Zip CLI を使う(unzip を前提にしない)
+    "${SEVENZIP_PATH}" x -y -bso0 -bsp0 -o"${NICOJK_ASS_TMP}/x" "${NICOJK_ASS_ZIP_PATH}" \
+        || { echo "nicojk_ass のzipの展開に失敗しました: ${NICOJK_ASS_ZIP_PATH}"; rm -rf "${NICOJK_ASS_TMP}"; exit 1; }
+    chmod +x "${NICOJK_ASS_TMP}/x/nicojk_ass"
+    NICOJK_ASS_ACTUAL="$("${NICOJK_ASS_TMP}/x/nicojk_ass" --version | tr -d '\r')"
+    if [ "${NICOJK_ASS_ACTUAL}" != "nicojk_ass ${NICOJK_ASS_VERSION}" ]; then
+        echo "nicojk_ass の版が一致しません: 期待 'nicojk_ass ${NICOJK_ASS_VERSION}'、実際 '${NICOJK_ASS_ACTUAL}'"
+        rm -rf "${NICOJK_ASS_TMP}"
+        exit 1
+    fi
+    # 以前のフォルダの形(exe_files/nicojk_ass/)が残っていると、exeを置けないので取り除く
+    [ -d "${NICOJK_ASS_DEST}" ] && rm -rf "${NICOJK_ASS_DEST}"
+    install -m 755 "${NICOJK_ASS_TMP}/x/nicojk_ass" "${NICOJK_ASS_DEST}" || exit 1
+    rm -rf "${NICOJK_ASS_LICENSE_DIR}"
+    mkdir -p "${NICOJK_ASS_LICENSE_DIR}"
+    cp -a "${NICOJK_ASS_TMP}/x/LICENSE" "${NICOJK_ASS_TMP}/x/README.md" "${NICOJK_ASS_TMP}/x/danmaku2ass-license" "${NICOJK_ASS_LICENSE_DIR}/" || exit 1
+    rm -rf "${NICOJK_ASS_TMP}"
 
     # defaultファイルのコピー
     cp -r defaults/avs/*       "${INSTALL_DIR}/avs/"

@@ -183,7 +183,7 @@
                             </Style>
                         </TextBlock.Style>
                     </TextBlock>
-                    <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,7" Text="nicojk_ass.pyパス"/>
+                    <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,7" Text="nicojk_assパス"/>
                     <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,7" Text="tsreplaceパス"/>
                     <TextBlock HorizontalAlignment="Right" Height="16" Margin="0,7" Text="tsMuxeRパス">
                         <TextBlock.Style>

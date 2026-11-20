@@ -44,7 +44,7 @@ Linuxでは、AmatsukazeServerCLIを起動し、WebUI (`http://<サーバーIP>:
   完全互換ではありませんが、代替実装を用意しています。
 
   - AmatsukazeGUI -> WebUI
-  - ニコニコ実況関連 -> nicojk_ass.py + [danmaku2ass.py](https://github.com/m13253/danmaku2ass)
+  - ニコニコ実況関連 -> nicojk_ass(`exe_files/nicojk_ass`、[danmaku2ass](https://github.com/m13253/danmaku2ass)を内蔵)
 
 - 対応予定なし
   - 設定画面へのドラッグドロップによるタスク追加
@@ -68,11 +68,7 @@ dockerでのインストール方法は[こちら](../docker/readme.md)。
 
 AviSynth、フィルタ、ソフトウェアエンコーダ、muxer、字幕ツールなどは同梱されているので、展開するだけで使用できます。
 
-追加でpython3.7以降が必要ですので、例えばUbuntu／Debianでは下記の通りインストールしてください。
-
-```bash
-sudo apt install python3
-```
+ニコニコ実況コメントのnicojk_assは、同梱の実行ファイルで動くのでPythonは不要です。SCRename.pyを使う場合のみ、python3.7以降が必要です(例えばUbuntu／Debianでは`sudo apt install python3`)。
 
 [リリース一覧](https://github.com/rigaya/Amatsukaze/releases)からLinux x64向けアーカイブをダウンロードし、実行するユーザーが読み書きできる場所に展開します。ダウンロードしたアーカイブが現在のディレクトリにある場合の例です。
 

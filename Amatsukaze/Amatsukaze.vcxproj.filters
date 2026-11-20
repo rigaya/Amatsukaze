@@ -90,6 +90,9 @@
     <ClInclude Include="NicoJK.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="NicoJKAlignAudio.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
     <ClInclude Include="OSUtil.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
@@ -240,6 +243,18 @@
       <Filter>ソース ファイル</Filter>
     </ClCompile>
     <ClCompile Include="NicoJK.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="NicoJKAlignSource.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="NicoJKAlignAudio.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="NicoJKAlignPCM.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="NicoJKWav.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
     <ClCompile Include="OSUtil.cpp">

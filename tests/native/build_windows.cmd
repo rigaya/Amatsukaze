@@ -47,6 +47,9 @@ if errorlevel 1 exit /b %ERRORLEVEL%
 "%MSBUILD%" tests\native\AribCaptionSmokeTests.vcxproj /p:Configuration=Release /p:Platform=x64 /m:1
 if errorlevel 1 exit /b %ERRORLEVEL%
 
+"%MSBUILD%" tests\native\NicoJKAlignAudioTests.vcxproj /p:Configuration=Release /p:Platform=x64 /m:1
+if errorlevel 1 exit /b %ERRORLEVEL%
+
 set "TEST_RUNTIME=%CD%\x64\Release"
 if not "%AMT_NATIVE_TEST_RUNTIME_DIR%"=="" (
   set "TEST_RUNTIME=%AMT_NATIVE_TEST_RUNTIME_DIR%"
@@ -59,6 +62,8 @@ if not "%AMT_NATIVE_TEST_RUNTIME_DIR%"=="" (
   copy /y x64\Release\*.dll "%AMT_NATIVE_TEST_RUNTIME_DIR%" >nul
   if errorlevel 1 exit /b 1
   copy /y x64\Release\AmatsukazeNativeTests.exe "%AMT_NATIVE_TEST_RUNTIME_DIR%" >nul
+  if errorlevel 1 exit /b 1
+  copy /y x64\Release\NicoJKAlignAudioTests.exe "%AMT_NATIVE_TEST_RUNTIME_DIR%" >nul
   if errorlevel 1 exit /b 1
   copy /y x64\Release\PgsEncoderTests.exe "%AMT_NATIVE_TEST_RUNTIME_DIR%" >nul
   if errorlevel 1 exit /b 1
@@ -90,6 +95,8 @@ if errorlevel 1 exit /b %ERRORLEVEL%
 AmatsukazeNativeTests.exe
 set "TEST_EXIT=%ERRORLEVEL%"
 PgsEncoderTests.exe
+if errorlevel 1 set "TEST_EXIT=1"
+NicoJKAlignAudioTests.exe
 if errorlevel 1 set "TEST_EXIT=1"
 AribCaptionSmokeTests.exe
 if errorlevel 1 set "TEST_EXIT=1"

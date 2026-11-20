@@ -15,6 +15,7 @@
 #include "StreamUtils.h"
 #include "CoreUtils.hpp"
 #include "InterProcessComm.h"
+#include "NicoJKSource.h"
 
 struct EncoderOptionInfo;
 
@@ -263,6 +264,7 @@ struct Config {
     SUBTITLE_MODE subtitleMode;
     tstring nicoConvAssPath;
     tstring nicoJKAssPath;
+    NicoJKSourceSpec nicoJKSource;
     tstring nicoConvChSidPath;
     bool exclusiveBatExec;
     tstring preEncBatchFile;
@@ -439,6 +441,7 @@ public:
     tstring getNicoConvAssPath() const;
 
     tstring getNicoJKAssPath() const;
+    const NicoJKSourceSpec& getNicoJKSource() const { return conf.nicoJKSource; }
 
     bool isNicoJKAssEnabled() const;
 

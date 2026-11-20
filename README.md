@@ -59,7 +59,7 @@ x264, x265, SVT-AV1, QSVEnc, NVEnc, VCEEnc, x262
 - デュアルモノAACを２つのモノラルAACに無劣化分離
 - 字幕をSRT、ASS、PGS、VTTに変換
 - Whisperによる文字起こしでSRT字幕を追加
-- ニコニコ実況や2ch実況のコメントをASS字幕として追加（NicoConvAss/nicojk_ass.py使用）
+- ニコニコ実況や2ch実況のコメントをASS字幕として追加（NicoConvAss/nicojk_ass使用）
 - 独自Avisynthソースクリップによる安定したチャプター・CM解析
 - ts構造を維持した映像部分のみの圧縮 (tsreplace使用)
 - MPEG2ソースの再エンコード範囲をCMカット境界周辺に抑え、それ以外を無劣化でコピー
@@ -561,22 +561,116 @@ AddTaskの終了コードは、`0`がタスク追加成功 (エンコード完�
     
     NicoConvAssのパラメータを設定したい場合は、NicoConvAss.exeを起動して設定してください。
 
-- Windows/Linux環境 (nicojk_ass.py)
+- Windows/Linux環境 (nicojk_ass)
 
-  同梱のnicojk_ass.py + [danmaku2ass.py](https://github.com/m13253/danmaku2ass) を使用してass字幕変換を行えます。Linuxでは変換ツールとしてnicojk_ass.pyのみを選択できます。WindowsではNicoConvAssのパスが設定されている場合はNicoConvAssを優先し、設定されていない場合はnicojk_ass.pyを使用します。
+  同梱のnicojk_ass(`exe_files/nicojk_ass`。Windowsは`nicojk_ass.exe`。[danmaku2ass](https://github.com/m13253/danmaku2ass)を内蔵)を使用してass字幕変換を行えます。Linuxでは変換ツールとしてnicojk_assのみを選択できます。WindowsではNicoConvAssのパスが設定されている場合はNicoConvAssを優先し、設定されていない場合はnicojk_assを使用します。
 
-  nicojk_ass.pyの実行にはPython 3が必要です。Windowsでは`python`、Linuxでは`python3`コマンドをPATHから実行できるようにしてください。
+  nicojk_assは単体で動く実行ファイルで、Pythonは不要です。配布アーカイブの`exe_files/`に、[nicojk_assのリリース](https://github.com/rigaya/nicojk_ass/releases)の単一の実行ファイルを同梱しています(ビルドでは`nicojk_ass_version.txt`の版をダウンロードして配置します)。ライセンスは`exe_files/license/nicojk_ass/`にあります。
 
-  nicojk_ass.pyでは、ニコニコ実況の過去ログAPIからデータを取得し、danmaku2ass.pyでassに変換後、生成されたassをNicoConvAssにある程度寄せる処理を行っています。
+  開発用に、nicojk_assのソースをそのまま動かすこともできます。基本設定のnicojk_assのパス(または`--nicojkass`)に、ソースの`nicojk_ass.py`を指定してください(この場合はPython 3が必要です)。ビルド時にローカルのzipを使うには、環境変数`NICOJK_ASS_ZIP`にzipのパスを指定します。
+
+  nicojk_assでは、ニコニコ実況の過去ログAPIからデータを取得し、danmaku2assでassに変換後、生成されたassをNicoConvAssにある程度寄せる処理を行っています。
   NicoConvAssの出力と完全互換ではないほか、細かい調整を行うことはできません。
 
   - 設定方法
   
-    1. 基本設定で、nicojk_ass.pyのパスを設定
+    1. 基本設定で、nicojk_assのパス(`exe_files/nicojk_ass`。Windowsは`nicojk_ass.exe`)を設定
     
     2. プロファイルでニコニコ実況コメントを有効化
    
     これでOKです。
+
+#### 別の放送・ローカルファイルのコメントを使う
+
+実況コメントを有効にしたうえで、取得元の局・時刻や、取得済みのコメントファイルを指定できます。CLIでは次のオプションを使用します。
+
+| オプション | 内容 |
+|:--|:--|
+| `--nicojk-file <パス>` | ニコニコ形式のxml、またはNicoJK形式のjklを読み込みます。基準録画を指定しない場合はAPIへ接続しません。基準録画と併用する場合、統合・照合失敗時の対象局取得は別に行います。 |
+| `--nicojk-channel <jk番号>` | 取得する局を`jk9`や`9`で指定します。通常のServiceIDによる局の判定より優先します。 |
+| `--nicojk-start <時刻>` | コメント側の基準時刻を指定します。初回放送の番組開始時刻などを指定してください。 |
+| `--nicojk-offset <秒>` | コメントの表示を一律にずらします。小数を指定でき、正の値は遅く表示します。 |
+| `--nicojk-program-start <時刻>` | 録画側の基準時刻を指定します。サーバーからの実行時は、有効なEITの番組開始時刻を自動で渡します。未指定時はTS先頭フレームの時刻です。 |
+
+時刻はUNIX秒の整数、`2026-10-01T23:00:00`、`20261001230000`のいずれかで指定します。タイムゾーンを省略した年月日時分秒はJSTです。ISO形式では`2026-10-01T23:00:00+09:00`のようにタイムゾーンも付けられます。
+
+例えば、初回放送のコメントファイルを再放送へ付ける場合は、通常のエンコード引数に次を追加します。
+
+```text
+--nicojk --nicojk-file "初回放送.xml" --nicojk-start 2026-10-01T23:00:00 --nicojk-offset 0.5
+```
+
+サーバー経由では、元TSと同じフォルダへ、TSの拡張子を除いた同名の`.nicojk.ini`を置くことでも指定できます。例えば`再放送.ts`には`再放送.nicojk.ini`を用意します。
+
+```ini
+# 例1: 初回放送(jk9)の過去ログをAPIから取得し、再放送の番組開始に合わせる
+channel=jk9
+start=2026-10-01T23:00:00
+offset=0.5
+```
+
+```ini
+# 例2: 取得済みのコメントファイルを使う(channelは使われない)
+file=初回放送.xml
+start=2026-10-01T23:00:00
+```
+
+設定ファイルはUTF-8で保存してください。BOMは使用できます。空行と`#`で始まる行は無視され、使用できるキーは`channel`、`start`、`offset`、`file`、`ref`、`ref-mode`です。`file`と`ref`の相対パスは`.nicojk.ini`のあるフォルダから解決します。`ref`を指定せずに`file`を省略すると、同名のコメントファイルがあればそれを使い、なければ指定した局・時刻の過去ログをAPIから取得します。
+
+`ref`を指定しない場合、元TSと同じフォルダにあるコメントファイルは、`<TS名>.nicojk.xml`、`<TS名>.nicojk.jkl`、`<TS名>.xml`、`<TS名>.jkl`の順に探します。`<TS名>`はTSの拡張子を除いた名前です。サーバーがTSを作業用にコピーした場合も、元TSのパスを基準に探します。xmlは`<packet>`直下に`<chat>`が並ぶ形式、jklは`<chat ...>本文</chat>`が1行ずつ並ぶ形式です。
+
+取得するファイルの優先順位はCLIの`--nicojk-file`、設定ファイルの`file`、同名のコメントファイルの順です。局、コメント基準時刻、ずれ量もCLIの指定が設定ファイルより優先されます。コメントファイルの指定がある場合、局の指定は取得には使用しません。
+
+時刻の対応は`録画時刻 = コメント時刻 - コメント基準時刻L + 録画基準時刻P + offset`です。`L`を指定しないAPI取得では`L=P`として、そのままの時刻で取得します。コメントファイルで`L`を省略すると、半数以上のコメントが元TSの録画時刻の範囲内にあればそのまま使い、それ以外は最初のコメントを`P`に合わせて警告します。`P`にEITの番組開始が指定されている場合、TS先頭ではなく番組開始へ合わせます。初回放送の番組開始を把握している場合は、`start`の明示を推奨します。ファイル内の表示位置`vpos`は使用せず、`date`と`date_usec`から表示時刻を計算します。CMカット時は、残した録画区間に対応するコメントだけを出力します。
+
+取得元を指定すると、WindowsでNicoConvAssを設定済みでも`nicojk_ass`を使用します。同梱の`exe_files/nicojk_ass`を利用できるようにしてください。`--nicojkass`のパスが空なら、実行モジュールと同じフォルダの`nicojk_ass`(Windowsは`nicojk_ass.exe`)を使用します。`.py`で終わるパスを指定したときだけ、Python 3で実行します(開発用)。`--nicojklog`と併用したときは取得元の指定が優先されます。取得元の指定も有効な同名ファイルもなければ従来の経路で動作し、`--nicojk-program-start`だけではnicojk_assの経路へ切り替わりません。
+
+設定ファイルの未知のキー・書式の誤り、明示したコメントファイルや`.nicojk.*`の読み込み失敗はエラーになります。実況取得エラーを無視する設定、または`--ignore-nicojk-error`でエンコードを続行できます。汎用名の`.xml`・`.jkl`にコメントが1件もなければ、警告して無視します。指定範囲内にコメントがない場合は警告し、空のASSを生成します。
+
+#### 別局の録画と音声を照合してコメントを合わせる
+
+同じ回を別の局で録画したTSがある場合は、`--nicojk-ref`で基準の録画を指定できます。主音声を照合して区間ごとのずれを求め、基準の局のコメントを対象の録画へ合わせます。CMの配置が違う録画にも使用でき、CMカットを行う場合は、照合後のコメントを通常どおり残した区間へ付け替えます。
+
+| オプション | 内容 |
+|:--|:--|
+| `--nicojk-ref <基準のTS>` | 音声とコメントの基準にする録画を指定します。 |
+| `--nicojk-ref-sid <ServiceId>` | 基準TSのサービスを指定します。省略時は最初の映像があるサービスを選びます。 |
+| `--nicojk-ref-mode replace` | 基準のコメントへ置き換えます。省略時もこの動作です。 |
+| `--nicojk-ref-mode merge` | 基準のコメントと対象の局のコメントを、表示時刻順に混ぜます。 |
+
+```text
+--nicojk --nicojk-ref "初回放送.ts"
+```
+
+取得済みのコメントを使う場合は、次のように指定します。`--nicojk-ref`と併用した`--nicojk-file`は、基準の放送専用のコメントファイルです。ファイルの`date`と`date_usec`は基準の録画側の時刻として解釈し、音声の照合結果を使って対象の時刻へ写します。
+
+```text
+--nicojk --nicojk-ref "初回放送.ts" --nicojk-file "初回放送.xml"
+```
+
+`merge`では対象の局のコメントを従来どおり過去ログAPIから取得するため、基準用の`--nicojk-file`を指定しても、対象側のAPI接続は行います。対象の局に実況チャンネルの対応がない場合は警告し、基準側のコメントだけを使います。異なる局に投稿されたコメントの重複除去は行いません。
+
+同名の`.nicojk.ini`でも指定できます。`ref`の相対パスはiniのあるフォルダが基準です。CLIで指定した項目がiniより優先されます。
+
+```ini
+ref=初回放送.ts
+ref-mode=replace
+file=初回放送.xml
+```
+
+`ref`と`channel`、`start`、`offset`は併用できません。ずれ量`0`を明示した場合もエラーになります。CLIとiniに分けて指定した場合も同様です。音声照合を指定したときは、同名のコメントファイルを自動探索しません。ファイルを使う場合は`--nicojk-file`またはiniの`file`で明示してください。
+
+一致した区間が録画の5割未満などで照合に失敗した場合は、警告して対象の局の通常のコメント取得に戻ります。このとき基準用のコメントファイルは流用しません。録画にTOTがない場合は先頭時刻を0として警告するため、ローカルファイルの時刻指定に注意してください。
+
+この機能にはnicojk_assの経路を使います。Windowsでも同梱の`exe_files/nicojk_ass.exe`が必要です。
+
+`--nicojk-alt replace|merge`を指定すると、`nicojk_ass`がしょぼいカレンダーで同じ回の先行放送を調べ、入力TSと同じフォルダと、その下の`succeeded`・`failed`フォルダから基準の録画を自動で探します。サーバーのプロファイルで「アニメの先行放送のコメント」を「置き換える」または「統合する」にすると、ニコニコ実況コメントが有効でジャンルがアニメの録画に、この引数が付きます。基準の録画の音声のデコードは、`nicojk_ass`がAmatsukazeCLI自身(`--mode nicojk_wav`)を呼んで行います。局対応表は、関東の地上波、主要なBS、AT-X、サンテレビ、KBS京都と、各地の民放の系列局を対象としています。系列局の録画は、キー局と同時の放送なら通常の実況取得を使います。遅れての放送なら先行放送の録画からコメントを置き換え、その録画が見つからなければコメントを付けません。
+
+自動選択した基準の録画を使う場合は、NicoConvAssを設定していても`nicojk_ass`を使います。これがない場合は警告を出し、通常の実況取得に戻ります。コメントファイルを明示した場合はエラーになります。
+
+入力TSと同名の`.nicojk.ini`やコメントファイル、`--nicojk-file`などの取得元の指定がある場合は手動指定を優先し、自動選択しません。録画が見つからない場合は、コメントの内容から時刻のずれを推定します。通信に失敗した場合は対象局のコメントを使います。自動選択の結果と見つからなかった理由はジョブログで確認できます。
+
+`--nicojk-dump-dir <フォルダ>`を指定すると、調査用に、対象の音声(`target.wav`)、本編の区間(`spans.json`)、デコードした基準の音声、`nicojk_ass`のレポート(`report.json`)をそのフォルダへ残します。
 
 ### バッチファイル実行機能
 
@@ -1067,8 +1161,8 @@ GPLのライブラリを組み込んでいるので、全体にGPLが適用さ�
 | [psisiarc](https://github.com/xtne6f/psisiarc) | MIT |
 | SCRename | 配布元の個別条件に従う |
 | [SCRenamePy](https://github.com/rigaya/SCRenamePy) | 配布元の個別条件に従う |
-| [nicojk_ass.py](./scripts/nicojk_ass.py) | MIT |
-| [danmaku2ass.py](https://github.com/m13253/danmaku2ass) | GPL-3.0 |
+| nicojk_ass(別リポジトリ`nicojk_ass`。ソースはMIT、配布するexeはGPL-3.0) | MIT |
+| [danmaku2ass.py](https://github.com/m13253/danmaku2ass)(nicojk_assに同梱) | GPL-3.0 |
 | [libjpeg-turbo](https://github.com/libjpeg-turbo/libjpeg-turbo) | BSD系ライセンス（複数） |
 | [zlib](https://zlib.net/) | zlib License |
 | [libaribcaption](https://github.com/xqq/libaribcaption) | MIT |
