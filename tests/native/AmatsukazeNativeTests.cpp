@@ -1336,7 +1336,7 @@ bool TestAudioTrackMergePlanner(tstring& diagnostic) {
     return Expect(plans.empty(), _T("統合で全無音トラックが残っています"), diagnostic);
 }
 
-// 無音ADTSフレームのバイト列が設計書 (doc/amatsukaze_audio_format.md) の手組み結果と一致すること
+// 無音ADTSフレームのバイト列が、手組みした既知の値と一致すること
 bool TestAudioSilentAdtsBytes(tstring& diagnostic) {
     constexpr int SFI_48000 = 3;
     struct Expected { AUDIO_CHANNELS layout; const char* hex; };
@@ -1353,7 +1353,7 @@ bool TestAudioSilentAdtsBytes(tstring& diagnostic) {
             hex += "0123456789abcdef"[byte & 15];
         }
         if (hex != item.hex) {
-            diagnostic = strsprintf(_T("無音AACのバイト列が設計書と一致しません: レイアウト=%d"), (int)item.layout);
+            diagnostic = strsprintf(_T("無音AACのバイト列が既知の値と一致しません: レイアウト=%d"), (int)item.layout);
             return false;
         }
     }
