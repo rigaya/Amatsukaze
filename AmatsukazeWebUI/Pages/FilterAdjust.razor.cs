@@ -21,9 +21,9 @@ public partial class FilterAdjust
     private readonly HashSet<Task> _operations = new();
     private JsonObject? _profile;
     private ProfileOptions? _options;
-    private IJSObjectReference? _renderer, _lifecycle, _canvasLifetime;
+    private IJSObjectReference? _renderer, _lifecycle, _canvasLifetime, _viewerModule, _viewer;
     private DotNetObjectReference<FilterAdjust>? _callback;
-    private ElementReference _beforeCanvas, _afterCanvas;
+    private ElementReference _beforeCanvas, _afterCanvas, _viewport, _imageLayer, _divider, _fitButton, _actualSizeButton, _zoomLabel;
     private string? _sessionId, _error;
     private string _status = "読み込み中…", _view = "after", _scale = "1", _quality = "yuv", _saveName = "";
     private string[] _notices = [], _logs = [];
@@ -32,7 +32,7 @@ public partial class FilterAdjust
     private double _fps = 60000d / 1001, _inputDar;
     private bool _decimate = true, _pngFallback, _expired, _disposed, _saving, _cropEnabled;
     private static readonly (string Value, string Label)[] ViewChoices = [("after", "フィルタ後"), ("before", "フィルタ前"), ("compare", "左右比較")];
-    private static readonly (string Value, string Label)[] ScaleChoices = [("1", "1/1"), ("two-thirds", "2/3"), ("2", "1/2")];
+    private static readonly (string Value, string Label)[] ScaleChoices = [("1", "1/1"), ("2", "1/2")];
     private string? _sourceName;
     private string FrameTypeLabel = "";
     private bool? FrameKept;
@@ -46,7 +46,6 @@ public partial class FilterAdjust
     private string FilterKind => Node(_profile, "FilterOption")?.ToString() ?? "None";
     private bool IsEncoder => FilterKind.EndsWith("EncFilter", StringComparison.Ordinal);
     private string FpsLabel => _fps.ToString("0.###", CultureInfo.InvariantCulture) + "fps";
-    private string _beforeStyle = "", _afterStyle = "";
     private static JsonNode? Node(JsonObject? obj, string name) => obj?.FirstOrDefault(x => string.Equals(x.Key, name, StringComparison.OrdinalIgnoreCase)).Value;
     private static void Set(JsonObject obj, string key, JsonNode? value)
     {
@@ -67,7 +66,10 @@ public partial class FilterAdjust
         {
             _renderer = await JS.InvokeAsync<IJSObjectReference>("import", "./js/filterPreview.js");
             _lifecycle = await JS.InvokeAsync<IJSObjectReference>("import", "./js/filterPreviewSession.js");
+            _viewerModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/filterPreviewViewer.js");
             _callback = DotNetObjectReference.Create(this);
+            _viewer = await _viewerModule.InvokeAsync<IJSObjectReference>("bind", _viewport, _imageLayer, _beforeCanvas, _afterCanvas,
+                _divider, _fitButton, _actualSizeButton, _zoomLabel, _callback);
             _canvasLifetime = await _renderer.InvokeAsync<IJSObjectReference>("bindCanvases", _beforeCanvas, _afterCanvas, _callback);
             try { _quality = await JS.InvokeAsync<string?>("localStorage.getItem", QualityKey) == "jpeg" ? "jpeg" : "yuv"; }
             catch (JSException) { }
@@ -205,7 +207,18 @@ public partial class FilterAdjust
         }
         return StartFrameAsync(direction);
     }
-    private Task SetViewAsync(string value) { _view = value; return RefreshAsync(); }
+    [JSInvokable] public Task StepPreviewAsync(int direction) => InvokeAsync(async () =>
+    {
+        if (!CanOperate || direction is not (-1 or 1) || _position + direction < 0 || _position + direction > MaxFrame) return;
+        await StepAsync(direction);
+        if (!_disposed) StateHasChanged();
+    });
+    private async Task SetViewAsync(string value)
+    {
+        _view = value;
+        await _viewer!.InvokeVoidAsync("setView", value == "compare");
+        await RefreshAsync();
+    }
     private Task SetScaleAsync(string value) { _scale = value; return RefreshAsync(); }
     private Task SetQualityAsync(string value) { _quality = value; return QualityChangedAsync(); }
     private async Task OnKeyDown(KeyboardEventArgs e)
@@ -240,12 +253,41 @@ public partial class FilterAdjust
             _status = "フレームを取得中…";
             _error = null;
             var pos = _position;
-            // コマ送り先はフィルタ後の並びで決め、比較画像も同じ位置で取得する。
-            if (_view != "before" || step.HasValue)
-                pos = await DrawFrameAsync(_afterCanvas, "after", pos, step, gen, Current, token);
+            var view = _view;
+            var options = CaptureFrameOptions();
+            PreviewFrame? after = null, before = null;
+            if (view == "compare" && !step.HasValue)
+            {
+                // 取得を同時に開始し、両方がそろってから新しい比較画像を描く。
+                var afterTask = FetchFrameAsync("after", pos, null, gen, options, token);
+                var beforeTask = FetchFrameAsync("before", pos, null, gen, options, token);
+                await Task.WhenAll(afterTask, beforeTask);
+                after = await afterTask;
+                before = await beforeTask;
+            }
+            else
+            {
+                // コマ送り先はフィルタ後の並びで決め、比較画像も同じ位置で取得する。
+                if (view != "before" || step.HasValue)
+                {
+                    after = await FetchFrameAsync("after", pos, step, gen, options, token);
+                    pos = after.Position;
+                }
+                if (view != "after") before = await FetchFrameAsync("before", pos, null, gen, options, token);
+            }
             if (!Current()) return;
-            if (_view != "after") await DrawFrameAsync(_beforeCanvas, "before", pos, null, gen, Current, token);
+            await Task.WhenAll(
+                after == null ? Task.CompletedTask : DrawFrameAsync(_afterCanvas, "after", after, gen, options, Current, token),
+                before == null ? Task.CompletedTask : DrawFrameAsync(_beforeCanvas, "before", before, gen, options, Current, token));
             if (!Current()) return;
+            // 比較中はフィルタ後の原寸に合わせ、前後を同じ入力DARで描く。
+            var display = view == "before" ? before! : after!;
+            var height = options.Crop?[3] ?? display.Height * options.Scale;
+            var dar = _inputDar > 0 ? _inputDar : display.Width * display.Sar / display.Height;
+            await _viewer!.InvokeVoidAsync("setSize", height * dar, height);
+            if (!Current()) return;
+            if (after != null) UpdateFrameInfo(after.Metadata);
+            pos = after?.Position ?? before!.Position;
             _position = pos;
             _status = _pngFallback && _quality == "yuv" ? "表示しました(PNG代替)" : "表示しました";
         }
@@ -253,7 +295,16 @@ public partial class FilterAdjust
         catch (Exception ex) { if (Current()) ShowError(ex); }
         finally { if (ReferenceEquals(_frameCancellation, cancellation)) _frameCancellation = null; cancellation.Dispose(); }
     }
-    private async Task<int> DrawFrameAsync(ElementReference canvas, string side, int pos, int? step, long gen, Func<bool> current, CancellationToken token)
+    private sealed record FrameOptions(int Scale, string Format, int[]? Crop, bool Decimate);
+    private sealed record PreviewFrame(byte[] Data, Dictionary<string, string> Metadata, string? Mime, int Position)
+    {
+        public int Width => int.Parse(Metadata["width"], CultureInfo.InvariantCulture);
+        public int Height => int.Parse(Metadata["height"], CultureInfo.InvariantCulture);
+        public double Sar => Metadata.TryGetValue("sarnum", out var sn) && double.TryParse(sn, CultureInfo.InvariantCulture, out var numerator)
+            && Metadata.TryGetValue("sarden", out var sd) && double.TryParse(sd, CultureInfo.InvariantCulture, out var denominator)
+            && numerator > 0 && denominator > 0 ? numerator / denominator : 1;
+    }
+    private FrameOptions CaptureFrameOptions()
     {
         var format = _quality == "jpeg" ? "jpeg" : _pngFallback ? "png" : "yuv";
         int[]? crop = null;
@@ -263,45 +314,44 @@ public partial class FilterAdjust
                 throw new InvalidOperationException("切り出し範囲には正の寸法と偶数の開始位置・寸法を指定してください");
             crop = [_cropX, _cropY, _cropWidth, _cropHeight];
         }
-        using var response = await Http.PostAsJsonAsync(SessionUrl + "/frame", new { gen, pos, side, scale = _scale == "2" ? 2 : 1, format, crop, step, decimate = _decimate }, token);
+        return new FrameOptions(_scale == "2" ? 2 : 1, format, crop, _decimate);
+    }
+    private async Task<PreviewFrame> FetchFrameAsync(string side, int pos, int? step, long gen, FrameOptions options, CancellationToken token)
+    {
+        using var response = await Http.PostAsJsonAsync(SessionUrl + "/frame",
+            new { gen, pos, side, scale = options.Scale, format = options.Format, crop = options.Crop, step, decimate = options.Decimate }, token);
         await CheckAsync(response, token);
         var metadata = response.Headers.Where(x => x.Key.StartsWith("X-Filter-Preview-", StringComparison.OrdinalIgnoreCase))
             .ToDictionary(x => x.Key["X-Filter-Preview-".Length..].ToLowerInvariant(), x => string.Join(",", x.Value));
         if (!metadata.TryGetValue("gen", out var returnedGen) || returnedGen != gen.ToString(CultureInfo.InvariantCulture)) throw new InvalidOperationException("フレームの世代が一致しません");
         var bytes = await response.Content.ReadAsByteArrayAsync(token);
-        if (!current()) return pos;
-        bool success = await _renderer!.InvokeAsync<bool>("draw", canvas, bytes, metadata, response.Content.Headers.ContentType?.MediaType);
-        if (!current()) return pos;
-        if (!success && format == "yuv")
+        var actual = metadata.TryGetValue("pos", out var value) && int.TryParse(value, out var result) ? result : pos;
+        return new PreviewFrame(bytes, metadata, response.Content.Headers.ContentType?.MediaType, actual);
+    }
+    private async Task DrawFrameAsync(ElementReference canvas, string side, PreviewFrame frame, long gen, FrameOptions options, Func<bool> current, CancellationToken token)
+    {
+        bool success = await _renderer!.InvokeAsync<bool>("draw", canvas, frame.Data, frame.Metadata, frame.Mime);
+        if (!current()) return;
+        if (!success && options.Format == "yuv")
         {
             _pngFallback = true;
             // 同じ位置のPNGを頼むため、コマ送りは再適用しない。
-            var actual = metadata.TryGetValue("pos", out var p) && int.TryParse(p, out var n) ? n : pos;
-            return await DrawFrameAsync(canvas, side, actual, null, gen, current, token);
+            var pngOptions = options with { Format = "png" };
+            var png = await FetchFrameAsync(side, frame.Position, null, gen, pngOptions, token);
+            if (current()) await DrawFrameAsync(canvas, side, png, gen, pngOptions, current, token);
         }
-        if (!success) throw new InvalidOperationException("画像を描画できません");
-        var displayWidth = int.Parse(metadata["width"], CultureInfo.InvariantCulture);
-        var displayHeight = int.Parse(metadata["height"], CultureInfo.InvariantCulture);
-        double sar = metadata.TryGetValue("sarnum", out var sn) && double.TryParse(sn, CultureInfo.InvariantCulture, out var numerator)
-            && metadata.TryGetValue("sarden", out var sd) && double.TryParse(sd, CultureInfo.InvariantCulture, out var denominator)
-            && numerator > 0 && denominator > 0 ? numerator / denominator : 1;
-        double displayScale = _scale == "two-thirds" ? 2d / 3 : 1;
-        // 入力のDARを保ち、解像度を変えても画質比較で映像の形が変わらないようにする。
-        double dar = _inputDar > 0 ? _inputDar : displayWidth * sar / displayHeight;
-        var style = FormattableString.Invariant($"width:{displayHeight * dar * displayScale:0.###}px;height:{displayHeight * displayScale:0.###}px");
-        if (side == "before") _beforeStyle = style; else _afterStyle = style;
-        if (side == "after")
-        {
-            var type = metadata.GetValueOrDefault("type", "unknown");
-            var duration = metadata.GetValueOrDefault("dur", "0");
-            FrameTypeLabel = type is not ("unknown" or "-" or "none") ? $"{type} {duration}/60" : "";
-            FrameKept = metadata.GetValueOrDefault("kept") switch { "1" => true, "0" => false, _ => null };
-            var filter = Node(_profile, "FilterSetting") as JsonObject;
-            DecimateInfoMissing = FilterKind == "Setting" && type is "unknown" or "none"
-                && bool.TryParse(Node(filter, "EnableDeinterlace")?.ToString(), out var enabled) && enabled
-                && Node(filter, "DeinterlaceAlgorithm")?.ToString() == "KFM";
-        }
-        return metadata.TryGetValue("pos", out var value) && int.TryParse(value, out var result) ? result : pos;
+        else if (!success) throw new InvalidOperationException("画像を描画できません");
+    }
+    private void UpdateFrameInfo(Dictionary<string, string> metadata)
+    {
+        var type = metadata.GetValueOrDefault("type", "unknown");
+        var duration = metadata.GetValueOrDefault("dur", "0");
+        FrameTypeLabel = type is not ("unknown" or "-" or "none") ? $"{type} {duration}/60" : "";
+        FrameKept = metadata.GetValueOrDefault("kept") switch { "1" => true, "0" => false, _ => null };
+        var filter = Node(_profile, "FilterSetting") as JsonObject;
+        DecimateInfoMissing = FilterKind == "Setting" && type is "unknown" or "none"
+            && bool.TryParse(Node(filter, "EnableDeinterlace")?.ToString(), out var enabled) && enabled
+            && Node(filter, "DeinterlaceAlgorithm")?.ToString() == "KFM";
     }
     private async Task InvalidateImagesAsync()
     {
@@ -406,6 +456,8 @@ public partial class FilterAdjust
         {
             if (_lifecycle != null) { await _lifecycle.InvokeVoidAsync("detach"); await _lifecycle.DisposeAsync(); }
             if (_canvasLifetime != null) { await _canvasLifetime.InvokeVoidAsync("dispose"); await _canvasLifetime.DisposeAsync(); }
+            if (_viewer != null) { await _viewer.InvokeVoidAsync("dispose"); await _viewer.DisposeAsync(); }
+            if (_viewerModule != null) await _viewerModule.DisposeAsync();
             if (_renderer != null) await _renderer.DisposeAsync();
         }
         catch (JSDisconnectedException) { }

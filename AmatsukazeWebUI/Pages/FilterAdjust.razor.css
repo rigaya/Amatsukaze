@@ -146,40 +146,50 @@
     overflow-y: auto;
 }
 
-/* 映像の領域。左右比較では2つを並べ、それぞれをスクロールで見られるようにする */
+/* 前後の画像を同じ矩形に重ね、映像領域からはみ出す部分を隠す。 */
 .fa-images {
     position: relative;
-    display: flex;
-    gap: 2px;
     flex: 1;
     min-height: 240px;
+    overflow: hidden;
+    touch-action: none;
+    user-select: none;
     background: var(--fa-stage-bg);
 }
 
-.fa-view {
-    position: relative;
-    flex: 1;
-    min-width: 0;
-    margin: 0;
-    display: flex;
+.fa-image-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    transform-origin: top left;
+    pointer-events: none;
 }
 
-.fa-view[hidden] {
+.fa-image-layer canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+}
+
+.fa-divider {
     display: none;
+    position: absolute;
+    inset-block: 0;
+    width: 1px;
+    background: rgba(255, 255, 255, 0.9);
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
+    pointer-events: none;
 }
 
-.fa-viewport {
-    flex: 1;
-    min-width: 0;
-    overflow: auto;
-    display: flex;
-}
-
-/* 画像が領域より小さいときは中央に置き、大きいときは左上からスクロールできるようにする */
-.fa-viewport canvas {
+.fa-images.is-compare .fa-divider {
     display: block;
-    margin: auto;
-    flex-shrink: 0;
+}
+
+.fa-zoom {
+    font-size: 0.82rem;
+    font-variant-numeric: tabular-nums;
+    min-width: 5ch;
 }
 
 .fa-badge {
@@ -194,8 +204,13 @@
     pointer-events: none;
 }
 
+.is-compare .fa-badge-after {
+    left: auto;
+    right: 8px;
+}
+
 /* 間引かれるフレームは枠の色で知らせる。内側の影は画像に隠れるので、枠だけの層を上に重ねる */
-.fa-view.is-dropped::after {
+.fa-images.is-dropped::after {
     content: "";
     position: absolute;
     inset: 0;
@@ -538,7 +553,7 @@
         grid-template-columns: 1fr;
     }
 
-    /* ページ全体がスクロールするので、映像の枠は高さを決めて中をスクロールさせる */
+    /* ページ全体がスクロールするので、映像の枠に高さを指定する */
     .fa-images {
         flex: none;
         height: 56vh;

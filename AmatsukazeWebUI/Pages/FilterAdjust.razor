@@ -34,6 +34,11 @@
                         disabled="@(!CanOperate)" @onclick="() => SetScaleAsync(value)">@label</button>
             }
         </div>
+        <div class="fa-segment" role="group" aria-label="拡大">
+            <button type="button" @ref="_fitButton" disabled="@(!CanOperate)">全体</button>
+            <button type="button" @ref="_actualSizeButton" disabled="@(!CanOperate)">等倍</button>
+        </div>
+        <output class="fa-zoom" aria-label="拡大率" @ref="_zoomLabel"></output>
         <div class="fa-segment" role="group" aria-label="転送">
             <button type="button" class="@(_quality == "yuv" ? "is-active" : "")" aria-pressed="@(_quality == "yuv")"
                     disabled="@(!CanOperate)" @onclick="@(() => SetQualityAsync("yuv"))" title="劣化なしで転送します(既定)">可逆</button>
@@ -58,19 +63,19 @@
     @* canvasは初回の描画からDOMに置く必要があるため、読み込み中も枠は出したまま上に重ねて知らせる *@
     <div class="fa-main">
         <section class="fa-stage">
-            <div class="fa-images @(_view == "compare" ? "is-compare" : "")">
-                <figure class="fa-view" hidden="@(_view == "after")">
-                    <div class="fa-viewport"><canvas @ref="_beforeCanvas" style="@_beforeStyle"></canvas></div>
-                    <figcaption class="fa-badge">フィルタ前</figcaption>
-                </figure>
-                <figure class="fa-view @(FrameKept == false ? "is-dropped" : "")" hidden="@(_view == "before")">
-                    <div class="fa-viewport"><canvas @ref="_afterCanvas" style="@_afterStyle"></canvas></div>
-                    <figcaption class="fa-badge">フィルタ後</figcaption>
-                    @if (FrameKept == false)
-                    {
-                        <div class="fa-badge fa-badge-drop">間引かれるフレーム</div>
-                    }
-                </figure>
+            <div class="fa-images @(_view == "compare" ? "is-compare" : "") @(FrameKept == false && _view != "before" ? "is-dropped" : "")"
+                 @ref="_viewport" tabindex="0" aria-label="映像プレビュー">
+                <div class="fa-image-layer" @ref="_imageLayer">
+                    <canvas @ref="_afterCanvas" hidden="@(_view == "before")"></canvas>
+                    <canvas @ref="_beforeCanvas" hidden="@(_view == "after")"></canvas>
+                </div>
+                <div class="fa-divider" @ref="_divider" aria-hidden="true"></div>
+                <span class="fa-badge" hidden="@(_view == "after")">フィルタ前</span>
+                <span class="fa-badge fa-badge-after" hidden="@(_view == "before")">フィルタ後</span>
+                @if (FrameKept == false && _view != "before")
+                {
+                    <div class="fa-badge fa-badge-drop">間引かれるフレーム</div>
+                }
                 @if (_profile == null)
                 {
                     <div class="fa-overlay">
