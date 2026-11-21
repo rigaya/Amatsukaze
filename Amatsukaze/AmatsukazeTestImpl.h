@@ -32,6 +32,9 @@ struct PsWriterInputForTest {
 extern "C" AMATSUKAZE_API int WritePsStreamForTest(const PsWriterInputForTest* inputs, size_t inputCount,
     uint8_t* output, size_t outputCapacity, size_t* outputLength);
 
+// 子プロセスの出力回収が明示的な起動より先に始まらないことを検証する。
+extern "C" AMATSUKAZE_API int TestSubProcessStartOrder(const tchar* childCommand);
+
 namespace test {
 
 int PrintCRCTable(AMTContext& ctx, const ConfigWrapper& setting);

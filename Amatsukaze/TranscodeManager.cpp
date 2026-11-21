@@ -842,6 +842,7 @@ public:
             _T("\"%s\" -n -1 -r - -"), setting.getTsReadExPath().c_str());
         ctx.infoF(_T("tsreadex コマンド: %s"), args.c_str());
         process_.reset(new TraceProcess(args, output_.get()));
+        process_->start();
         try {
             worker_ = std::thread([this]() { run(); });
         } catch (...) {
@@ -2242,6 +2243,7 @@ void DoBadThing() {
                 try {
                     task.process = std::make_unique<StdRedirectedSubProcess>(
                         task.cmd, 0, false, false, true);
+                    task.process->start();
                     task.exitCode = task.process->join();
                 } catch (const Exception& e) {
                     task.errorMessage = e.message();

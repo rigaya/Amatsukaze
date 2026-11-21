@@ -362,7 +362,8 @@ Y4MEncodeWriter::Y4MEncodeWriter(AMTContext& ctx, const tstring& encoder_args, V
         auto filterLineCallback = [this](bool, const std::vector<char>& line, bool) {
             this->ctx.infoF(_T("[エンコーダフィルタ] %s"), char_to_tstring(std::string(line.begin(), line.end())));
         };
-        filterProcess_.reset(new StdRedirectedSubProcess(filterArgs, 5, false, disablePowerThrottoling, true, filterLineCallback, (PIPE_HANDLE)0, true));
+        filterProcess_.reset(new StdRedirectedSubProcess(filterArgs, 5, false, disablePowerThrottoling, true, filterLineCallback, true));
+        filterProcess_->start();
         // フィルタのstdout読み取り端は所有権ごと受け取り、本エンコーダのstdinに渡す
         externalStdIn = filterProcess_->detachStdOutReadHandle();
     }
@@ -378,22 +379,25 @@ Y4MEncodeWriter::Y4MEncodeWriter(AMTContext& ctx, const tstring& encoder_args, V
                 lineCallback(isErr, line, isProgress);
             }
         };
-        process_.reset(new StdRedirectedSubProcess(encoder_args, 5, false, disablePowerThrottoling, captureOutputOnly, encoderLineCallback, externalStdIn));
+        process_.reset(new StdRedirectedSubProcess(encoder_args, 5, false, disablePowerThrottoling, captureOutputOnly, encoderLineCallback));
+        process_->start(&externalStdIn);
+        const int logSarW = sarInContainerOnly ? 1 : fmt.sarWidth;
+        const int logSarH = sarInContainerOnly ? 1 : fmt.sarHeight;
+        ctx.infoF(_T("y4m format: YUV%sp%d %s %dx%d SAR %d:%d %d/%dfps"),
+            char_to_tstring(getYUV(vi)), vi.BitsPerComponent(), fmt.progressive ? _T("progressive") : _T("tff"),
+            fmt.width, fmt.height, logSarW, logSarH, vi.fps_numerator, vi.fps_denominator);
     } catch (...) {
         if (filterProcess_) {
-            // 本エンコーダに渡せなかった読み取り端を閉じる
+            // 引き渡し前に失敗した場合は、フィルタのstdoutをここで閉じる。
             closePipeHandle(externalStdIn);
-            // stdinを閉じないとフィルタが入力待ちのままjoin()が返らない
-            filterProcess_->finishWrite();
+            // 下流より先にフィルタのstdinを閉じて、下流へEOFを届ける。
             filterProcess_->join();
+        }
+        if (process_) {
+            process_->join();
         }
         throw;
     }
-    const int logSarW = sarInContainerOnly ? 1 : fmt.sarWidth;
-    const int logSarH = sarInContainerOnly ? 1 : fmt.sarHeight;
-    ctx.infoF(_T("y4m format: YUV%sp%d %s %dx%d SAR %d:%d %d/%dfps"),
-        char_to_tstring(getYUV(vi)), vi.BitsPerComponent(), fmt.progressive ? _T("progressive") : _T("tff"),
-        fmt.width, fmt.height, logSarW, logSarH, vi.fps_numerator, vi.fps_denominator);
 }
 Y4MEncodeWriter::~Y4MEncodeWriter() {
     if ((filterProcess_ && filterProcess_->isRunning()) || process_->isRunning()) {
@@ -878,6 +882,7 @@ void AMTFilterVideoEncoder::encodeSWParallel(
             auto runMp4BoxWithLogging = [&](const tstring& cmdLine) {
                 ctx.infoF(_T("MP4Box コマンド: %s"), cmdLine.c_str());
                 StdRedirectedSubProcess proc(cmdLine, 0, true, false, true);
+                proc.start();
                 int ret = proc.join();
                 const auto& lines = proc.getCapturedLines();
                 if (!lines.empty()) {

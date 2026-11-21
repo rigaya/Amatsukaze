@@ -55,8 +55,9 @@ std::unique_ptr<StdRedirectedSubProcess> SubtitleGenerator::startWhisperProcess(
     ctx.infoF(_T("%s"), cmd);
 
     // ログ取りつつ起動
-    return std::unique_ptr<StdRedirectedSubProcess>(
-        new StdRedirectedSubProcess(cmd, 10, param.isUtf8Log, false, param.captureOnly));
+    auto process = std::make_unique<StdRedirectedSubProcess>(cmd, 10, param.isUtf8Log, false, param.captureOnly);
+    process->start();
+    return process;
 }
 
 void SubtitleGenerator::runWhisper(const tstring& whisperPath,

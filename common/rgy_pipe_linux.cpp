@@ -98,7 +98,15 @@ int RGYPipeProcessLinux::run(const tstring& cmd_line, const TCHAR *exedir, uint3
 }
 
 int RGYPipeProcessLinux::run(const std::vector<tstring>& args, const TCHAR *exedir, uint32_t priority, bool hidden, bool minimized, bool new_console) {
-    startPipes();
+    if (startPipes() != 0) {
+        return 1;
+    }
+
+    // ワーカースレッドがいる状態でforkするため、argvのメモリは親で準備する。
+    std::vector<const TCHAR *> pargs(args.size() + 1, nullptr);
+    for (size_t i = 0; i < args.size(); i++) {
+        pargs[i] = args[i].c_str();
+    }
 
     m_phandle = fork();
     if (m_phandle < 0) {
@@ -125,12 +133,9 @@ int RGYPipeProcessLinux::run(const std::vector<tstring>& args, const TCHAR *exed
             }
             dup2(m_pipe.stdErr.h_write, STDERR_FILENO);
         }
-        std::vector<const TCHAR *> pargs(args.size() + 1, nullptr);
-        for (size_t i = 0; i < args.size(); i++) {
-            pargs[i] = args[i].c_str();
-        }
-        int ret = execvp(pargs[0], (char *const *)pargs.data());
-        exit(-1);
+        execvp(pargs[0], (char *const *)pargs.data());
+        // 親から継承した標準I/Oバッファや終了ハンドラーを実行しない。
+        _exit(255);
     }
     //親プロセス
     if (m_pipe.stdIn.mode) {

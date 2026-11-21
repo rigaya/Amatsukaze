@@ -12,6 +12,7 @@
 #include <deque>
 #include <string>
 #include <functional>
+#include <future>
 #include <thread>
 #include <mutex>
 #include <condition_variable>
@@ -194,24 +195,29 @@ public:
     PIPE_HANDLE detachStdOutReadHandle();
     int join();
 protected:
+    SubProcess() = default;
+    void startProcess(const tstring& args, bool disablePowerThrottoling, PIPE_HANDLE& externalStdIn);
+    bool hasProcess() const { return process_ != nullptr; }
     // 外部から与えたハンドルをstdinに使用しているか
     bool isExternalStdIn() const { return externalStdIn_; }
 private:
-    void runSetPowerThrottling();
+    void runSetPowerThrottling() noexcept;
 
     std::unique_ptr<RGYPipeProcess> process_;
     std::vector<uint8_t> bufferStdOut;
     std::vector<uint8_t> bufferStdErr;
-    DWORD exitCode_;
+    int exitCode_ = 0;
     std::unique_ptr<RGYThreadSetPowerThrottoling> thSetPowerThrottling;
-    bool externalStdIn_;
+    bool externalStdIn_ = false;
 };
 
 class EventBaseSubProcess : public SubProcess {
 public:
     EventBaseSubProcess(const tstring& args, const bool disablePowerThrottoling = false,
-        const PIPE_HANDLE externalStdIn = (PIPE_HANDLE)0, const bool noDrainStdOut = false);
-    ~EventBaseSubProcess();
+        const bool noDrainStdOut = false);
+    ~EventBaseSubProcess() = default;
+    // 派生型の構築後に呼ぶ。読み取り端を引き受けた場合は呼び出し元の値を空にする。
+    void start(PIPE_HANDLE* externalStdIn = nullptr);
     int join();
     bool isRunning();
 protected:
@@ -227,19 +233,22 @@ private:
         bool isErr_;
     };
 
+    tstring args_;
+    bool disablePowerThrottoling_;
     bool noDrainStdOut_;
+    std::shared_future<bool> drainStart_;
     DrainThread drainOut;
     DrainThread drainErr;
 
     void drain_thread(bool isErr);
 };
 
-class StdRedirectedSubProcess : public EventBaseSubProcess {
+class StdRedirectedSubProcess final : public EventBaseSubProcess {
 public:
     using LineCallback = std::function<void(bool isErr, const std::vector<char>& line, bool isProgress)>;
 
     StdRedirectedSubProcess(const tstring& args, const int bufferLines = 0, const bool isUtf8 = false, const bool disablePowerThrottoling = false,
-        bool captureOnly = false, LineCallback lineCallback = LineCallback(), const PIPE_HANDLE externalStdIn = (PIPE_HANDLE)0, const bool noDrainStdOut = false);
+        bool captureOnly = false, LineCallback lineCallback = LineCallback(), const bool noDrainStdOut = false);
 
     virtual ~StdRedirectedSubProcess();
 

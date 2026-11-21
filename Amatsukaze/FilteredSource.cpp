@@ -1076,6 +1076,7 @@ AVSValue __cdecl AMTExec(AVSValue args, void* user_data, IScriptEnvironment* env
     auto cmd = StringFormat(_T("%s"), args[1].AsString());
     PRINTF("%s", StringFormat("AMTExec: %s\n", cmd).c_str());
     StdRedirectedSubProcess proc(cmd);
+    proc.start();
     proc.join();
     return args[0];
 }

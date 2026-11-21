@@ -47,6 +47,21 @@
 
 namespace {
 
+tstring testExecutable;
+
+bool TestSubProcessStart(tstring& diagnostic) {
+    const auto command = _T("\"") + testExecutable + _T("\" --subprocess-test-child");
+    const int result = TestSubProcessStartOrder(command.c_str());
+    if (result == 0) return true;
+    switch (result) {
+    case 1: diagnostic = _T("明示的に起動する前に出力回収スレッドが開始された"); break;
+    case 2: diagnostic = _T("子の終了コードまたは回収後の状態が一致しない"); break;
+    case 3: diagnostic = _T("標準出力と標準エラーの内容が一致しない"); break;
+    default: diagnostic = _T("プロセス間のパイプ転送または終了コードが一致しない"); break;
+    }
+    return false;
+}
+
 bool Expect(bool condition, const TCHAR* message, tstring& diagnostic) {
     if (condition) return true;
     diagnostic = message;
@@ -4310,6 +4325,7 @@ constexpr TestCase TEST_CASES[] = {
     { _T("audio_track_merge_planner"), TestAudioTrackMergePlanner },
     { _T("audio_silent_adts_bytes"), TestAudioSilentAdtsBytes },
     { _T("audio_channel_conversion"), TestAudioChannelConversion },
+    { _T("subprocess_start_order"), TestSubProcessStart },
     { _T("command_line_arguments"), TestCommandLineArguments },
     { _T("nicojk_source"), TestNicoJKSource },
     { _T("cm_cut_offset"), TestCMCutOffset },
@@ -4390,6 +4406,18 @@ int _tmain(int argc, TCHAR* argv[]) {
     // ワイド文字の出力で日本語を変換できるよう、文字種別だけ環境のロケールに合わせる
     // (数値の書式はstd::stod等に影響するため変更しない)
     std::setlocale(LC_CTYPE, "");
+    if (argc >= 2 && tstring(argv[1]) == _T("--subprocess-test-child")) {
+        if (std::getchar() != 'G') return 0;
+        if (argc == 3 && tstring(argv[2]) == _T("--forward")) {
+            std::putchar('G');
+            std::fputs("forward stderr\n", stderr);
+            return 7;
+        }
+        std::fputs("child stdout\n", stdout);
+        std::fputs("child stderr\n", stderr);
+        return 23;
+    }
+    testExecutable = argv[0];
     bool listOnly = false;
     std::vector<tstring> selectedNames;
     for (int i = 1; i < argc; i++) {

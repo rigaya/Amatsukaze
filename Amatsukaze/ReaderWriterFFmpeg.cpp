@@ -696,7 +696,9 @@ void av::EncodeWriter::start(const tstring& encoder_args, VideoFormat fmt, bool 
     }
     y4mparser.clear();
     videoWriter_ = new MyVideoWriter(this, fmt, bufsize);
-    process_ = new StdRedirectedSubProcess(encoder_args, 5);
+    auto process = std::make_unique<StdRedirectedSubProcess>(encoder_args, 5);
+    process->start();
+    process_ = process.release();
 }
 
 void av::EncodeWriter::inputFrame(Frame& frame) {

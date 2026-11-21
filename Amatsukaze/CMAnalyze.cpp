@@ -747,6 +747,7 @@ void CMAnalyze::chapterExe(int videoFileIndex, const VideoFormat& inputFormat, c
     auto args = MakeChapterExeArgs(videoFileIndex, inputFormat, avspath);
     ctx.infoF(_T("%s"), args);
     MySubProcess process(args, &stdoutf, &stderrf);
+    process.start();
     int exitCode = process.join();
     if (exitCode != 0) {
         THROWF(FormatException, "ChapterExeがエラーコード(%d)を返しました", exitCode);
@@ -784,6 +785,7 @@ void CMAnalyze::joinLogoScp(int videoFileIndex, int serviceId) {
     ctx.infoF(_T("SERVICE_ID   : %d"), serviceId);
     ctx.infoF(_T("CLI_OUT_PATH : %s"), clioutpath);
     MySubProcess process(args);
+    process.start();
     int exitCode = process.join();
     if (exitCode != 0) {
         THROWF(FormatException, "join_logo_scp.exeがエラーコード(%d)を返しました", exitCode);

@@ -407,6 +407,7 @@ void AMTMuxder::mux(EncodeFileKey key,
     for (int i = 0; i < (int)args.size(); i++) {
         ctx.infoF(_T("%s"), args[i].first);
         StdRedirectedSubProcess muxer(args[i].first, 0, args[i].second);
+        muxer.start();
         int ret = muxer.join();
         if (ret != 0) {
             // mkvmerge使用時、戻り値"1"は警告扱いにしたいが、
@@ -466,6 +467,7 @@ void AMTSimpleMuxder::mux(VideoFormat videoFormat, int audioCount) {
 
     {
         MySubProcess muxer(args[0].first);
+        muxer.start();
         int ret = muxer.join();
         if (ret != 0) {
             THROWF(RuntimeException, "mux failed (muxer exit code: %d)", ret);

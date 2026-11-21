@@ -96,7 +96,9 @@ int RGYPipeProcessWin::run(const tstring& cmd_line, const TCHAR *exedir, uint32_
     memset(&m_pi, 0, sizeof(PROCESS_INFORMATION));
     si.cb = sizeof(STARTUPINFO);
 
-    startPipes();
+    if (startPipes() != 0) {
+        return 1;
+    }
 
     if (m_pipe.stdOut.mode)
         si.hStdOutput = m_pipe.stdOut.h_write;

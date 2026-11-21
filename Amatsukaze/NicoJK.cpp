@@ -37,6 +37,7 @@ static bool CanRunPython3(const tstring& command) {
         const auto args = command
             + _T(" -c \"import sys; print('AMATSUKAZE_PYTHON3_OK') if sys.version_info >= (3, 6) else sys.exit(1)\"");
         StdRedirectedSubProcess process(args, 0, true, false, true);
+        process.start();
         if (process.join() != 0) {
             return false;
         }
@@ -123,6 +124,7 @@ NicoJK::MySubProcess::MySubProcess(const tstring& args)
     , errConv(true) {}
 
 NicoJK::MySubProcess::~MySubProcess() {
+    join();
     outConv.Flush();
     errConv.Flush();
 }
@@ -263,6 +265,7 @@ bool NicoJK::nicoConvASS(ConvMode mode, size_t startTime) {
             auto args = MakeNicoConvASSArgs(mode, startTime, type_s[i]);
             ctx.infoF(_T("%s"), args);
             MySubProcess process(args);
+            process.start();
             int exitCode = process.join();
             if (exitCode == 0 && File::exists(setting_.getTmpNicoJKASSPath(type_s[i]))) {
                 if (mask_t[i] & typemask) {
@@ -568,6 +571,7 @@ bool NicoJK::makeASSByScript(int serviceId, time_t startTime, int duration) {
     ctx.infoF(_T("%s"), args);
     // nicojk_assの出力はUTF-8なので、ログの文字コードへ変換して流す
     StdRedirectedSubProcess process(args, 0, true);
+    process.start();
     const int exitCode = process.join();
     if (exitCode == 100) {
         // 付けるコメントがない (nicojk_ass側で 100 を返す)

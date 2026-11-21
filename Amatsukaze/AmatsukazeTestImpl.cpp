@@ -369,9 +369,52 @@
     };
 
     ProcTest proc;
+    proc.start();
     proc.join();
 
     return 0;
+}
+
+extern "C" AMATSUKAZE_API int TestSubProcessStartOrder(const tchar* childCommand) {
+    StdRedirectedSubProcess process(childCommand, 2, false, false, true);
+    // 子は標準入力の合図が届くまで何も書かない。
+    // joinableの観測なので、スレッドが実際に実行された時刻に依存しない。
+    if (process.isRunning()) {
+        process.join();
+        return 1;
+    }
+    process.start();
+    uint8_t go = 'G';
+    process.write(MemoryChunk(&go, sizeof(go)));
+    if (process.join() != 23 || process.join() != 23 || process.isRunning()) return 2;
+
+    bool outSeen = false;
+    bool errSeen = false;
+    for (const auto& line : process.getCapturedLines()) {
+        const std::string text(line.begin(), line.end());
+        outSeen |= text == "child stdout";
+        errSeen |= text == "child stderr";
+    }
+    if (!outSeen || !errSeen || process.getCapturedLines().size() != 2) return 3;
+
+    // フィルタのstdoutを回収スレッドで消費せず、下流のstdinへ渡す。
+    StdRedirectedSubProcess producer(tstring(childCommand) + _T(" --forward"), 2, false, false, true, {}, true);
+    StdRedirectedSubProcess consumer(childCommand, 2, false, false, true);
+    producer.start();
+    auto forwarded = producer.detachStdOutReadHandle();
+    if (!forwarded) return 4;
+    try {
+        consumer.start(&forwarded);
+        producer.write(MemoryChunk(&go, sizeof(go)));
+    } catch (...) {
+        closePipeHandle(forwarded);
+        producer.join();
+        throw;
+    }
+    const int producerExit = producer.join();
+    const int consumerExit = consumer.join();
+    return !forwarded && producerExit == 7 && consumerExit == 23
+        && producer.getCapturedLines().size() == 1 && consumer.getCapturedLines().size() == 2 ? 0 : 4;
 }
 
 /* static */ int test::FileStreamInfo(AMTContext& ctx, const ConfigWrapper& setting) {

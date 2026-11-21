@@ -9,27 +9,31 @@
 #include "ProcessThread.h"
 #include "rgy_thread_affinity.h"
 #include "cpu_info.h"
+#include <utility>
 
-SubProcess::SubProcess(const tstring& args, const bool disablePowerThrottoling, const PIPE_HANDLE externalStdIn) :
-    process_(createRGYPipeProcess()),
-    bufferStdOut(),
-    bufferStdErr(),
-    exitCode_(0),
-    thSetPowerThrottling(),
-    externalStdIn_(externalStdIn != (PIPE_HANDLE)0) {
-    // RGYPipeProcessの初期化（標準入出力のモード設定）
-    process_->init(externalStdIn_ ? PIPE_MODE_EXTERNAL : PIPE_MODE_ENABLE, PIPE_MODE_ENABLE, PIPE_MODE_ENABLE);
+SubProcess::SubProcess(const tstring& args, const bool disablePowerThrottoling, PIPE_HANDLE externalStdIn) {
+    startProcess(args, disablePowerThrottoling, externalStdIn);
+}
+
+void SubProcess::startProcess(const tstring& args, bool disablePowerThrottoling, PIPE_HANDLE& externalStdIn) {
+    auto process = createRGYPipeProcess();
+    externalStdIn_ = externalStdIn != (PIPE_HANDLE)0;
+    process->init(externalStdIn_ ? PIPE_MODE_EXTERNAL : PIPE_MODE_ENABLE, PIPE_MODE_ENABLE, PIPE_MODE_ENABLE);
     if (externalStdIn_) {
-        process_->setExternalStdIn(externalStdIn);
+        process->setExternalStdIn(std::exchange(externalStdIn, (PIPE_HANDLE)0));
     }
-    process_->setStdOutBufferSize(4 * 1024);
-    process_->setStdErrBufferSize(4 * 1024);
-    
-    // プロセス起動
-    if (process_->run(args, nullptr, 0, false, false) != 0) {
-        THROW(RuntimeException, "プロセス起動に失敗。exeのパスを確認してください。");
-    }
+    process->setStdOutBufferSize(4 * 1024);
+    process->setStdErrBufferSize(4 * 1024);
 
+    try {
+        if (process->run(args, nullptr, 0, false, false) != 0) {
+            THROW(RuntimeException, "プロセス起動に失敗。exeのパスを確認してください。");
+        }
+    } catch (...) {
+        process->close();
+        throw;
+    }
+    process_ = std::move(process);
     if (disablePowerThrottoling) {
         runSetPowerThrottling();
     }
@@ -109,12 +113,17 @@ PIPE_HANDLE SubProcess::detachStdOutReadHandle() {
     return process_->detachStdOutReadHandle();
 }
 
-void SubProcess::runSetPowerThrottling() {
+void SubProcess::runSetPowerThrottling() noexcept {
 #if defined(_WIN32) || defined(_WIN64)
-    int pid = process_->pid();
-    if (pid > 0) {
-        thSetPowerThrottling = std::make_unique<RGYThreadSetPowerThrottoling>(pid);
-        thSetPowerThrottling->run(RGYThreadPowerThrottlingMode::Disabled);
+    try {
+        const int pid = process_->pid();
+        if (pid > 0) {
+            auto throttling = std::make_unique<RGYThreadSetPowerThrottoling>(pid);
+            throttling->run(RGYThreadPowerThrottlingMode::Disabled);
+            thSetPowerThrottling = std::move(throttling);
+        }
+    } catch (const std::exception&) {
+        // 補助スレッドの準備に失敗しても、起動済みの子の入出力回収を続ける。
     }
 #endif // defined(_WIN32) || defined(_WIN64)
 }
@@ -137,24 +146,41 @@ int SubProcess::join() {
     return exitCode_;
 }
 
-EventBaseSubProcess::EventBaseSubProcess(const tstring& args, const bool disablePowerThrottoling, const PIPE_HANDLE externalStdIn, const bool noDrainStdOut)
-    : SubProcess(args, disablePowerThrottoling, externalStdIn)
+EventBaseSubProcess::EventBaseSubProcess(const tstring& args, const bool disablePowerThrottoling, const bool noDrainStdOut)
+    : args_(args)
+    , disablePowerThrottoling_(disablePowerThrottoling)
     , noDrainStdOut_(noDrainStdOut)
     , drainOut(this, false)
-    , drainErr(this, true) {
-    if (!noDrainStdOut_) {
-        drainOut.start();
-    }
-    drainErr.start();
-}
+    , drainErr(this, true) {}
 
-EventBaseSubProcess::~EventBaseSubProcess() {
-    if ((noDrainStdOut_ ? drainErr : drainOut).isRunning()) {
-        THROW(InvalidOperationException, "call join before destroy object ...");
+void EventBaseSubProcess::start(PIPE_HANDLE* externalStdIn) {
+    if (drainStart_.valid()) {
+        THROW(InvalidOperationException, "サブプロセスは一度だけ起動できます");
     }
+    std::promise<bool> started;
+    drainStart_ = started.get_future().share();
+    PIPE_HANDLE noExternalStdIn = (PIPE_HANDLE)0;
+    try {
+        // 必要な読み取りスレッドをすべて確保してから子を起動する。
+        // 一部だけ起動して失敗した場合も、子の出力待ちに入らず回収できる。
+        if (!noDrainStdOut_) {
+            drainOut.start();
+        }
+        drainErr.start();
+        startProcess(args_, disablePowerThrottoling_, externalStdIn ? *externalStdIn : noExternalStdIn);
+    } catch (...) {
+        started.set_value(false);
+        drainOut.join();
+        drainErr.join();
+        throw;
+    }
+    started.set_value(true);
 }
 
 int EventBaseSubProcess::join() {
+    if (!hasProcess()) {
+        return SubProcess::join();
+    }
     /*
     * 終了処理の流れ
     * finishWrite()
@@ -186,7 +212,9 @@ EventBaseSubProcess::DrainThread::DrainThread(EventBaseSubProcess* this_, bool i
     , isErr_(isErr) {}
 
 void EventBaseSubProcess::DrainThread::run() {
-    this_->drain_thread(isErr_);
+    if (this_->drainStart_.get()) {
+        this_->drain_thread(isErr_);
+    }
 }
 
 void EventBaseSubProcess::drain_thread(bool isErr) {
@@ -202,8 +230,8 @@ void EventBaseSubProcess::drain_thread(bool isErr) {
 }
 
 StdRedirectedSubProcess::StdRedirectedSubProcess(const tstring& args, const int bufferLines, const bool isUtf8, const bool disablePowerThrottoling,
-    bool captureOnly, LineCallback lineCallback, const PIPE_HANDLE externalStdIn, const bool noDrainStdOut) :
-    EventBaseSubProcess(args, disablePowerThrottoling, externalStdIn, noDrainStdOut),
+    bool captureOnly, LineCallback lineCallback, const bool noDrainStdOut) :
+    EventBaseSubProcess(args, disablePowerThrottoling, noDrainStdOut),
     isUtf8(isUtf8),
     bufferLines(bufferLines),
     captureOnly(captureOnly),
@@ -215,6 +243,8 @@ StdRedirectedSubProcess::StdRedirectedSubProcess(const tstring& args, const int 
     capturedLines() {}
 
 StdRedirectedSubProcess::~StdRedirectedSubProcess() {
+    // 最後の出力回収を派生のバッファが生きている間に終える。
+    join();
     if (isUtf8) {
         outLiner.Flush();
         errLiner.Flush();
@@ -359,6 +389,7 @@ void StdRedirectedSubProcess::onTextLine(bool isErr, const uint8_t* ptr, int len
             if (!bufferLine.empty() && bufferLine.back() == '\0') {
                 bufferLine.pop_back();
             }
+            std::lock_guard<std::mutex> lock(mtx);
             capturedLines.push_back(std::move(bufferLine));
         }
     } else {

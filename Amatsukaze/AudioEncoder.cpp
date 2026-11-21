@@ -27,6 +27,7 @@ void EncodeAudio(AMTContext& ctx, const tstring& encoder_args,
 
     auto process = std::unique_ptr<StdRedirectedSubProcess>(
         new StdRedirectedSubProcess(encoder_args, 5));
+    process->start();
 
     int nchannels = 2;
     int bytesPerSample = 2;
