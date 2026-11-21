@@ -520,7 +520,7 @@ tstring NicoJK::MakeNicoJKScriptArgs(const tstring& pythonCommand,
             pathToOS(dumpDir), pathToOS(getWorkFilePath(_T("report.json"))));
     }
     const char* markDebug = std::getenv("AMATSUKAZE_NICOJK_MERGE_DEBUG");
-    if (markDebug && std::string(markDebug) == "1") args += _T(" --mark-reference-color #DCF2F2");
+    if (markDebug && std::string(markDebug) == "1") args += _T(" --mark-reference-color yellow");
     return args;
 }
 
