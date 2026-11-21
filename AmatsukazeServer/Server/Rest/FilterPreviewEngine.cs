@@ -11,10 +11,20 @@ using System.Threading.Tasks;
 
 namespace Amatsukaze.Server.Rest
 {
+    internal sealed record FilterPreviewEngineTiming(TimeProvider Clock, TimeSpan ReadyTimeout, TimeSpan StopTimeout)
+    {
+        internal static FilterPreviewEngineTiming Default { get; } =
+            new(TimeProvider.System, TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(5));
+
+        internal Task WaitReadyAsync(Task ready, CancellationToken cancellation) =>
+            ready.WaitAsync(ReadyTimeout, Clock, cancellation);
+    }
+
     public sealed class FilterPreviewEngine : IDisposable
     {
         public sealed record Reply(IReadOnlyDictionary<string, string> Metadata, byte[] Data);
         private readonly Process process;
+        private readonly FilterPreviewEngineTiming timing;
         private readonly ConcurrentDictionary<(long id, long gen), TaskCompletionSource<Reply>> pending = new();
         private readonly ConcurrentQueue<string> logs = new();
         private readonly object requestSync = new();
@@ -26,7 +36,11 @@ namespace Amatsukaze.Server.Rest
         private bool disposed;
 
         public FilterPreviewEngine(string executable, IEnumerable<string> arguments)
+            : this(executable, arguments, FilterPreviewEngineTiming.Default) { }
+
+        internal FilterPreviewEngine(string executable, IEnumerable<string> arguments, FilterPreviewEngineTiming timing)
         {
+            this.timing = timing;
             var start = new ProcessStartInfo(executable) { UseShellExecute = false, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true };
             foreach (var arg in arguments) start.ArgumentList.Add(arg);
             process = Process.Start(start) ?? throw new IOException("プレビューエンジンを起動できません");
@@ -36,7 +50,7 @@ namespace Amatsukaze.Server.Rest
 
         public string[] GetLogs() => logs.ToArray();
 
-        public Task WaitReadyAsync(CancellationToken cancellation) => ready.Task.WaitAsync(TimeSpan.FromSeconds(15), cancellation);
+        public Task WaitReadyAsync(CancellationToken cancellation) => timing.WaitReadyAsync(ready.Task, cancellation);
 
         private async Task ReadErrorsAsync()
         {
@@ -181,8 +195,11 @@ namespace Amatsukaze.Server.Rest
             try
             {
                 if (!process.HasExited) process.Kill(entireProcessTree: true);
-                return process.WaitForExit(5000);
+                using var deadline = new CancellationTokenSource(timing.StopTimeout, timing.Clock);
+                process.WaitForExitAsync(deadline.Token).GetAwaiter().GetResult();
+                return true;
             }
+            catch (OperationCanceledException) { return false; }
             catch (InvalidOperationException) { return true; }
             catch (System.ComponentModel.Win32Exception) { return false; }
             finally { process.Dispose(); }

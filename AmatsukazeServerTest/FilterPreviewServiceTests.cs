@@ -1,6 +1,7 @@
 using System;
 using System.Globalization;
 using System.IO;
+using System.Runtime.Versioning;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -14,12 +15,12 @@ namespace AmatsukazeServerTest;
 [Collection("REST一時保存先")]
 public class FilterPreviewServiceTests
 {
-    [Theory]
+    [LinuxTheory]
+    [SupportedOSPlatform("linux")]
     [InlineData(FilterOption.None)]
     [InlineData(FilterOption.Custom)]
     public async Task 偽エンジンでセッションの設定取得とフレーム取得を行う(FilterOption originalOption)
     {
-        if (OperatingSystem.IsWindows()) return;
         await using var fixture = new RestFileSystemFixture();
         var executable = Path.Combine(fixture.Root, "fake-engine");
         File.WriteAllText(executable, "#!/bin/sh\nprintf 'AMTPREVIEW READY version=1\\n'\nread line\nprintf 'AMTPREVIEW INFO gen=1 frames=4\\n'\nread line\nprintf 'AMTPREVIEW FRAME id=1 gen=1 pos=0 format=jpeg width=2 height=2 bytes=4 pitches=2,1,1\\nABCD'\nread line\nprintf 'AMTPREVIEW ERROR id=0 gen=2 message=failed\\n'\nread line\n");
@@ -41,19 +42,20 @@ public class FilterPreviewServiceTests
         item.Profile.FilterOption = originalOption;
         item.Profile.FilterPath = "カスタム.avs";
         await fixture.Api.Queue.Seed(item);
-        using var service = new FilterPreviewService(fixture.Api.Queue.Store, _ => new FilterPreviewSourceFormat { Progressive = 0, SarWidth = 4, SarHeight = 3, ColorSpace = 1 });
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-        var id = await service.CreateAsync(123, timeout.Token);
+        var timing = new FilterPreviewEngineTiming(new FakeTimeProvider(), Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+        using var service = new FilterPreviewService(fixture.Api.Queue.Store,
+            _ => new FilterPreviewSourceFormat { Progressive = 0, SarWidth = 4, SarHeight = 3, ColorSpace = 1 }, timing);
+        var id = await service.CreateAsync(123, CancellationToken.None);
         var sourceName = service.GetSourceName(id);
-        var initial = await service.GetConfigurationAsync(id, timeout.Token);
-        var configured = await service.ConfigureAsync(id, new FilterPreviewConfigRequest { Gen = 1, FilterOption = FilterOption.None }, timeout.Token);
-        var frame = await service.FrameAsync(id, new FilterPreviewFrameRequest { Gen = 1, Pos = 0, Format = "jpeg" }, timeout.Token);
-        var cached = await service.FrameAsync(id, new FilterPreviewFrameRequest { Gen = 1, Pos = 0, Format = "jpeg" }, timeout.Token);
-        var customError = await Record.ExceptionAsync(() => service.ConfigureAsync(id, new FilterPreviewConfigRequest { Gen = 2, FilterOption = FilterOption.Custom }, timeout.Token));
-        var engineError = await Record.ExceptionAsync(() => service.ConfigureAsync(id, new FilterPreviewConfigRequest { Gen = 2, FilterOption = FilterOption.Setting, FilterSetting = new FilterSetting { EnableResize = true } }, timeout.Token));
-        var after = await service.GetConfigurationAsync(id, timeout.Token);
-        var preserved = await service.GetEditedProfileAsync(id, timeout.Token, true);
-        var selected = await service.GetEditedProfileAsync(id, timeout.Token);
+        var initial = await service.GetConfigurationAsync(id, CancellationToken.None);
+        var configured = await service.ConfigureAsync(id, new FilterPreviewConfigRequest { Gen = 1, FilterOption = FilterOption.None }, CancellationToken.None);
+        var frame = await service.FrameAsync(id, new FilterPreviewFrameRequest { Gen = 1, Pos = 0, Format = "jpeg" }, CancellationToken.None);
+        var cached = await service.FrameAsync(id, new FilterPreviewFrameRequest { Gen = 1, Pos = 0, Format = "jpeg" }, CancellationToken.None);
+        var customError = await Record.ExceptionAsync(() => service.ConfigureAsync(id, new FilterPreviewConfigRequest { Gen = 2, FilterOption = FilterOption.Custom }, CancellationToken.None));
+        var engineError = await Record.ExceptionAsync(() => service.ConfigureAsync(id, new FilterPreviewConfigRequest { Gen = 2, FilterOption = FilterOption.Setting, FilterSetting = new FilterSetting { EnableResize = true } }, CancellationToken.None));
+        var after = await service.GetConfigurationAsync(id, CancellationToken.None);
+        var preserved = await service.GetEditedProfileAsync(id, CancellationToken.None, true);
+        var selected = await service.GetEditedProfileAsync(id, CancellationToken.None);
         var previewRoot = Path.Combine(temp, "filter_preview");
         var workDirectory = Path.Combine(previewRoot, id);
         var closed = service.Close(id);

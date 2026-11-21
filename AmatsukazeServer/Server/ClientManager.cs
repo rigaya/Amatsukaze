@@ -154,7 +154,11 @@ namespace Amatsukaze.Server
         }
 
         // bindAddressを省略した場合は全アドレスで待ち受ける（サーバー版）。
-        public async Task Listen(int port, IPAddress bindAddress = null)
+        public Task Listen(int port, IPAddress bindAddress = null) =>
+            Listen(port, bindAddress, onListening: null, retryOnFailure: true);
+
+        internal async Task Listen(int port, IPAddress bindAddress,
+            Action<IPEndPoint> onListening, bool retryOnFailure)
         {
             int errorCount = 0;
 
@@ -162,6 +166,7 @@ namespace Amatsukaze.Server
             {
                 listener = new TcpListener(bindAddress ?? IPAddress.Any, port);
                 listener.Start();
+                onListening?.Invoke((IPEndPoint)listener.LocalEndpoint);
                 try
                 {
                     var local = (listener.LocalEndpoint as IPEndPoint)?.ToString() ?? "<unknown>";
@@ -192,6 +197,8 @@ namespace Amatsukaze.Server
                 {
                     if (finished == false)
                     {
+                        if (!retryOnFailure) throw;
+
                         Util.AddLog("Listen中にエラーが発生", e);
 
                         // 一定時間待つ

@@ -148,4 +148,11 @@ jobs:
       - name: Restore and run offline tests
         run: |
           dotnet restore AmatsukazeServerTest/AmatsukazeServerTest.csproj
-          dotnet test AmatsukazeServerTest/AmatsukazeServerTest.csproj --no-restore --filter "Category!=Network"
+          dotnet test AmatsukazeServerTest/AmatsukazeServerTest.csproj --no-restore --filter "Category!=Network" \
+            --blame-hang-timeout 5m --logger "trx;LogFileName=offline.trx" --results-directory csharp-test-results
+      - name: Save C# test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: csharp-offline-results
+          path: csharp-test-results

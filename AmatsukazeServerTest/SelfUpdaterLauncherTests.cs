@@ -1,38 +1,48 @@
 using Amatsukaze.Server.Update;
-using System.Diagnostics;
+using System.ComponentModel;
 using Xunit;
 
 namespace AmatsukazeServerTest;
 
 public sealed class SelfUpdaterLauncherTests
 {
-    [Fact]
+    [LinuxFact]
     public async Task UpdaterのReady通知を確認して処理を返す()
     {
-        if (OperatingSystem.IsWindows()) return;
         using var fixture = new LauncherFixture();
-        fixture.WriteScript("#!/bin/sh\nprintf ready > \"$1\"\nsleep 2\n", includeReadyArgument: true);
+        fixture.WriteScript("#!/bin/sh\nprintf ready > \"$1\"\n", includeReadyArgument: true);
 
-        await SelfUpdaterLauncher.StartAndWaitReadyAsync(fixture.Updater,
-            UpdateOSKind.Linux, CancellationToken.None, TimeSpan.FromSeconds(2));
+        await SelfUpdaterLauncher.StartAndWaitReadyAsync(fixture.Updater, UpdateOSKind.Linux,
+            CancellationToken.None, SelfUpdaterReadyTiming.Default with { Timeout = Timeout.InfiniteTimeSpan },
+            async (path, os) =>
+            {
+                // 脱離を使わず、試験が起動したランチャーの終了を待ってから通知を読む。
+                using var process = SelfUpdaterLauncher.Start(path, os, launcherOverride: string.Empty);
+                await process.WaitForExitAsync();
+                Assert.Equal(0, process.ExitCode);
+                Assert.True(File.Exists(fixture.ReadyPath));
+            });
 
-        Assert.True(File.Exists(fixture.ReadyPath));
+        Assert.Equal("ready", File.ReadAllText(fixture.ReadyPath));
     }
 
     [Fact]
     public async Task Updater起動失敗ではStagingを残す()
     {
-        if (OperatingSystem.IsWindows()) return;
         using var fixture = new LauncherFixture();
-        fixture.WriteScript("#!/bin/sh\nexit 1\n");
         File.WriteAllText(fixture.ReadyPath, "古い通知");
+        var clock = new FakeTimeProvider();
+        var timing = CreateTiming(clock);
+        var timers = clock.ObserveTimers();
+        var start = SelfUpdaterLauncher.StartAndWaitReadyAsync(fixture.Updater, UpdateOSKind.Linux,
+            CancellationToken.None, timing, static (_, _) => Task.CompletedTask);
 
-        var exception = await Assert.ThrowsAsync<UpdateInstallException>(() =>
-            SelfUpdaterLauncher.StartAndWaitReadyAsync(fixture.Updater,
-                UpdateOSKind.Linux, CancellationToken.None, TimeSpan.FromSeconds(1)));
-
-        Assert.Equal("UPDATER_START_FAILED", exception.Code);
+        Assert.Equal(timing.PollInterval, await timers.ReadAsync());
         Assert.False(File.Exists(fixture.ReadyPath));
+        clock.Advance(timing.Timeout);
+
+        var exception = await Assert.ThrowsAsync<UpdateInstallException>(() => start);
+        Assert.Equal("UPDATER_START_FAILED", exception.Code);
         Assert.True(Directory.Exists(fixture.Staging));
         Assert.Equal("変更禁止", File.ReadAllText(Path.Combine(fixture.Staging, "sentinel")));
     }
@@ -40,11 +50,9 @@ public sealed class SelfUpdaterLauncherTests
     [Fact]
     public async Task Updater起動失敗ではMaintenancePauseを解除する()
     {
-        if (OperatingSystem.IsWindows()) return;
         using var fixture = new LauncherFixture();
-        fixture.WriteScript("#!/bin/sh\nexit 1\n");
         var pauses = new List<bool>();
-
+        var clock = new FakeTimeProvider();
         await Assert.ThrowsAsync<UpdateInstallException>(async () =>
         {
             using var lease = await UpdateMaintenanceLease.AcquireAsync(() => false, pause =>
@@ -52,8 +60,8 @@ public sealed class SelfUpdaterLauncherTests
                 pauses.Add(pause);
                 return Task.CompletedTask;
             }, CancellationToken.None);
-            await SelfUpdaterLauncher.StartAndWaitReadyAsync(fixture.Updater,
-                UpdateOSKind.Linux, CancellationToken.None, TimeSpan.FromSeconds(1));
+            await SelfUpdaterLauncher.StartAndWaitReadyAsync(fixture.Updater, UpdateOSKind.Linux,
+                CancellationToken.None, CreateTiming(clock), ThrowLaunchFailure);
         });
 
         Assert.Equal(new[] { true, false }, pauses);
@@ -63,40 +71,41 @@ public sealed class SelfUpdaterLauncherTests
     [Fact]
     public async Task Updater起動コマンドが無い場合は開始失敗にする()
     {
-        if (OperatingSystem.IsWindows()) return;
         using var fixture = new LauncherFixture();
-        fixture.WriteScript("#!/bin/sh\nprintf unexpected > \"$1\"\n", includeReadyArgument: true);
-
+        var clock = new FakeTimeProvider();
         var exception = await Assert.ThrowsAsync<UpdateInstallException>(() =>
-            SelfUpdaterLauncher.StartAndWaitReadyAsync(fixture.Updater,
-                UpdateOSKind.Linux, CancellationToken.None, TimeSpan.FromSeconds(1),
-                Path.Combine(fixture.Root, "存在しないsetsid")));
-
+            SelfUpdaterLauncher.StartAndWaitReadyAsync(fixture.Updater, UpdateOSKind.Linux,
+                CancellationToken.None, CreateTiming(clock), ThrowLaunchFailure));
         Assert.Equal("UPDATER_START_FAILED", exception.Code);
+        Assert.IsType<Win32Exception>(exception.InnerException);
         Assert.False(File.Exists(fixture.ReadyPath));
         Assert.True(Directory.Exists(fixture.Staging));
     }
 
     [Fact]
-    public async Task Readyを出さないUpdaterが生存中でもTimeoutで開始失敗にする()
+    public async Task UpdaterのReady通知が期限内に届くと待機を終了する()
     {
-        if (OperatingSystem.IsWindows()) return;
         using var fixture = new LauncherFixture();
-        var pidPath = Path.Combine(fixture.Root, "updater.pid");
-        fixture.WriteScript("#!/bin/sh\nprintf '%s' \"$$\" > \"" + pidPath + "\"\nsleep 2\n");
-        var elapsed = Stopwatch.StartNew();
+        var clock = new FakeTimeProvider();
+        var timing = CreateTiming(clock) with { Timeout = TimeSpan.FromSeconds(4) };
+        var timers = clock.ObserveTimers();
+        var start = SelfUpdaterLauncher.StartAndWaitReadyAsync(fixture.Updater, UpdateOSKind.Linux,
+            CancellationToken.None, timing, static (_, _) => Task.CompletedTask);
 
-        var exception = await Assert.ThrowsAsync<UpdateInstallException>(() =>
-            SelfUpdaterLauncher.StartAndWaitReadyAsync(fixture.Updater,
-                UpdateOSKind.Linux, CancellationToken.None, TimeSpan.FromMilliseconds(400)));
+        Assert.Equal(timing.PollInterval, await timers.ReadAsync());
+        Assert.False(start.IsCompleted);
+        File.WriteAllText(fixture.ReadyPath, "ready");
+        clock.Advance(timing.PollInterval);
 
-        Assert.Equal("UPDATER_START_FAILED", exception.Code);
-        Assert.True(elapsed.Elapsed >= TimeSpan.FromMilliseconds(300));
-        Assert.True(File.Exists(pidPath));
-        using var updaterProcess = Process.GetProcessById(int.Parse(File.ReadAllText(pidPath)));
-        Assert.False(updaterProcess.HasExited);
+        await start;
         Assert.True(Directory.Exists(fixture.Staging));
     }
+
+    private static SelfUpdaterReadyTiming CreateTiming(TimeProvider clock) =>
+        new(clock, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(2));
+
+    private static Task ThrowLaunchFailure(string path, UpdateOSKind os) =>
+        Task.FromException(new Win32Exception(2, "起動コマンドが見つかりません。"));
 
     [Fact]
     public void 保留中のStagingがある場合は新しい準備を拒否する()

@@ -250,7 +250,7 @@ public sealed class CmSegAnnotationTests
         Assert.Equal(File.GetLastWriteTimeUtc(f.SourcePath), root.GetProperty("source").GetProperty("mtime").GetDateTime());
         Assert.Equal(Convert.ToHexString(SHA1.HashData(Encoding.UTF8.GetBytes(f.JlsText))).ToLowerInvariant(), root.GetProperty("jlsSha1").GetString());
         Assert.True(root.GetProperty("reviewed").GetBoolean());
-        Assert.InRange(root.GetProperty("updatedAt").GetDateTime(), DateTime.UtcNow.AddMinutes(-1), DateTime.UtcNow.AddMinutes(1));
+        Assert.Equal(f.Clock.GetUtcNow().UtcDateTime, root.GetProperty("updatedAt").GetDateTime());
         Assert.False(root.TryGetProperty("warning", out _));
         Assert.Empty(Directory.GetFiles(f.Root, "*.tmp"));
         var restored = f.Open()!.Get();
@@ -472,7 +472,8 @@ public sealed class CmSegAnnotationTests
             Environment.SetEnvironmentVariable("AMT_CMSEG_ANNOTATION", environmentValue);
         }
 
-        public CmSegAnnotationStore? Open() => CmSegAnnotationStore.Open(SourcePath, Root, 300, "30000/1001", Segments);
+        public FakeTimeProvider Clock { get; } = new();
+        public CmSegAnnotationStore? Open() => CmSegAnnotationStore.Open(SourcePath, Root, 300, "30000/1001", Segments, Clock);
         public CmSegSaveRequest Request() => new()
         {
             Segments = Segments.Select((s, i) => new CmSegLabelUpdate { Idx = i + 1, Label = CmSegLabels.InitialLabel(s.Label, s.JlsKeep) }).ToList()

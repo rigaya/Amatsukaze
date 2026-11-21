@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Net.Http;
@@ -16,20 +15,23 @@ namespace Amatsukaze.Server.Update
             [0x21, 0x3c, 0x61, 0x72, 0x63, 0x68];
         private static readonly byte[] SevenZipArchiveMagic =
             [0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c];
-        private static readonly TimeSpan InactivityTimeout = TimeSpan.FromSeconds(30);
+        private static readonly UpdateHttpTiming DefaultTiming = new UpdateHttpTiming(TimeProvider.System,
+            TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(1));
         private static readonly TimeSpan ProgressInterval = TimeSpan.FromMilliseconds(250);
         private readonly HttpClient client;
         private readonly bool ownsClient;
+        private readonly UpdateHttpTiming timing;
 
         public UpdateDownloader(string proxy)
             : this(UpdateHttpClientFactory.Create(proxy), ownsClient: true)
         {
         }
 
-        internal UpdateDownloader(HttpClient client, bool ownsClient = false)
+        internal UpdateDownloader(HttpClient client, bool ownsClient = false, UpdateHttpTiming timing = null)
         {
             this.client = client ?? throw new ArgumentNullException(nameof(client));
             this.ownsClient = ownsClient;
+            this.timing = timing ?? DefaultTiming;
         }
 
         public async Task<DownloadResult> DownloadAsync(ReleaseAssetInfo asset,
@@ -87,7 +89,7 @@ namespace Amatsukaze.Server.Update
                         ("msg", ex.Message));
                     if (attempt < MaxAttempts)
                     {
-                        await Task.Delay(TimeSpan.FromSeconds(attempt), cancellationToken)
+                        await timing.WaitBeforeRetryAsync(attempt, cancellationToken)
                             .ConfigureAwait(false);
                     }
                 }
@@ -100,7 +102,7 @@ namespace Amatsukaze.Server.Update
             string target, UpdateLog log, IProgress<DownloadProgress> progress, int attempt,
             CancellationToken cancellationToken)
         {
-            var stopwatch = Stopwatch.StartNew();
+            var started = timing.Clock.GetTimestamp();
             using var request = new HttpRequestMessage(HttpMethod.Get, asset.BrowserDownloadUrl);
             using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead,
                 cancellationToken).ConfigureAwait(false);
@@ -118,8 +120,7 @@ namespace Amatsukaze.Server.Update
                 var buffer = new byte[128 * 1024];
                 while (true)
                 {
-                    using var idle = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                    idle.CancelAfter(InactivityTimeout);
+                    using var idle = timing.StartDeadline(cancellationToken);
                     int count;
                     try
                     {
@@ -127,7 +128,7 @@ namespace Amatsukaze.Server.Update
                     }
                     catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
                     {
-                        throw new IOException("30秒間データを受信できませんでした", ex);
+                        throw new IOException($"{timing.Timeout.TotalSeconds}秒間データを受信できませんでした", ex);
                     }
                     if (count == 0)
                     {
@@ -137,25 +138,26 @@ namespace Amatsukaze.Server.Update
                         .ConfigureAwait(false);
                     hash.AppendData(buffer, 0, count);
                     received += count;
-                    if (stopwatch.Elapsed - lastProgress >= ProgressInterval)
+                    var elapsed = timing.Clock.GetElapsedTime(started);
+                    if (elapsed - lastProgress >= ProgressInterval)
                     {
                         progress?.Report(new DownloadProgress(received, total,
-                            received / Math.Max(stopwatch.Elapsed.TotalSeconds, 0.001)));
-                        lastProgress = stopwatch.Elapsed;
+                            received / Math.Max(elapsed.TotalSeconds, 0.001)));
+                        lastProgress = elapsed;
                     }
                 }
             }
-            stopwatch.Stop();
+            var downloadTime = timing.Clock.GetElapsedTime(started);
             progress?.Report(new DownloadProgress(received, total,
-                received / Math.Max(stopwatch.Elapsed.TotalSeconds, 0.001)));
+                received / Math.Max(downloadTime.TotalSeconds, 0.001)));
             var sha256 = Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
             log.Write(target, "S06_DOWNLOAD", "OK",
                 ("url", asset.BrowserDownloadUrl),
                 ("host", finalUri?.Host ?? "?"),
                 ("length", total),
                 ("received", received),
-                ("elapsed", stopwatch.Elapsed.TotalSeconds.ToString("F3", CultureInfo.InvariantCulture) + "s"),
-                ("speed", (long)(received / Math.Max(stopwatch.Elapsed.TotalSeconds, 0.001))),
+                ("elapsed", downloadTime.TotalSeconds.ToString("F3", CultureInfo.InvariantCulture) + "s"),
+                ("speed", (long)(received / Math.Max(downloadTime.TotalSeconds, 0.001))),
                 ("retry", attempt - 1),
                 ("resume", "no"));
 
@@ -176,7 +178,7 @@ namespace Amatsukaze.Server.Update
             log.Write(target, "S07_VERIFY", "OK",
                 ("size", received), ("expected_size", asset.Size), ("sha256", sha256),
                 ("expected", expected ?? "<none>"), ("match", digestMatch), ("format", format));
-            return new DownloadResult(partial, received, sha256, stopwatch.Elapsed, format);
+            return new DownloadResult(partial, received, sha256, downloadTime, format);
         }
 
         private static string ParseExpectedDigest(string digest)

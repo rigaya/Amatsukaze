@@ -49,8 +49,8 @@ public sealed class SelfUpdateRecoveryTests
         using var fixture = new RecoveryFixture();
         var older = fixture.CreateResidue("new", "11111111", "古い新版");
         var newer = fixture.CreateResidue("new", "22222222", "新しい新版");
-        Directory.SetLastWriteTimeUtc(older, DateTime.UtcNow.AddMinutes(-2));
-        Directory.SetLastWriteTimeUtc(newer, DateTime.UtcNow.AddMinutes(-1));
+        Directory.SetLastWriteTimeUtc(older, DateTime.UnixEpoch.AddHours(1));
+        Directory.SetLastWriteTimeUtc(newer, DateTime.UnixEpoch.AddHours(2));
 
         Assert.Equal(2, SelfUpdateRecovery.RecoverWwwRootWithoutThrow(fixture.AppRoot));
 

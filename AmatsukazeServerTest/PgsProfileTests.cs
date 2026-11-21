@@ -124,15 +124,7 @@ public sealed class PgsProfileTests
         Assert.True(process.Start());
         var output = process.StandardOutput.ReadToEndAsync();
         var error = process.StandardError.ReadToEndAsync();
-        try
-        {
-            await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(10));
-        }
-        catch (TimeoutException)
-        {
-            process.Kill(entireProcessTree: true);
-            throw;
-        }
+        await process.WaitForExitAsync();
         Assert.Equal(0, process.ExitCode);
         Assert.Equal("", await error);
         var expected = new List<string>();

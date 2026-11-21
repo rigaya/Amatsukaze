@@ -7,7 +7,7 @@ namespace AmatsukazeServerTest;
 
 public sealed class UpdateTransactionTests
 {
-    [Fact]
+    [LinuxFact]
     public async Task 展開キャンセルでトランザクションとプロセスツリーを残さない()
     {
         using var fixture = new TransactionFixture();
@@ -21,17 +21,54 @@ public sealed class UpdateTransactionTests
             var result = new DownloadResult(archive, new FileInfo(archive).Length, "-",
                 TimeSpan.Zero, "zip");
             using var log = new UpdateLog(fixture.AppRoot);
-            using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
-            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-                new ArchiveExtractor(fakeExtractor).ExtractAsync(result,
-                    transaction.GetTargetExtractDirectory("test"), "test", log,
-                    cancellation.Token));
+            using var cancellation = new CancellationTokenSource();
+            var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var draining = new TaskCompletionSource<Task>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var extractor = new ArchiveExtractor(fakeExtractor, limits: null, start =>
+            {
+                var extracting = start.ArgumentList.Count != 0 && start.ArgumentList[0] == "x";
+                start.RedirectStandardInput = extracting;
+                var process = Process.Start(start)!;
+                if (extracting)
+                {
+                    try
+                    {
+                        // 子が出力端を継承し、入力待ちに入ったことを確かめる。
+                        Assert.Equal("ready", process.StandardError.ReadLine());
+                        ready.SetResult();
+                    }
+                    catch
+                    {
+                        process.StandardInput.Close();
+                        process.WaitForExit();
+                        process.Dispose();
+                        throw;
+                    }
+                }
+                return process;
+            }, (process, drain) =>
+            {
+                if (process.StartInfo.RedirectStandardInput) draining.SetResult(drain);
+            });
+
+            var extraction = extractor.ExtractAsync(result,
+                transaction.GetTargetExtractDirectory("test"), "test", log, cancellation.Token);
+            var readyToCancel = Task.WhenAll(ready.Task, draining.Task);
+            if (await Task.WhenAny(readyToCancel, extraction) == extraction)
+            {
+                await extraction;
+                Assert.Fail("子プロセスの起動通知前に展開処理が終了した");
+            }
+
+            await readyToCancel;
+            var drain = await draining.Task;
+            await cancellation.CancelAsync();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => extraction);
+            // 展開の取消が返った時点で、子が継承した出力端までEOFになっている。
+            Assert.True(drain.IsCompletedSuccessfully);
         }
 
         Assert.False(Directory.Exists(rootDir));
-        await Task.Delay(200);
-        Assert.DoesNotContain(EnumerateCommandLines(), command => command.Contains(fakeExtractor,
-            StringComparison.Ordinal));
         fixture.AssertExeFilesUnchanged();
     }
 
@@ -76,19 +113,6 @@ public sealed class UpdateTransactionTests
         fixture.AssertExeFilesUnchanged();
     }
 
-    private static IEnumerable<string> EnumerateCommandLines()
-    {
-        if (!Directory.Exists("/proc")) yield break;
-        foreach (var directory in Directory.EnumerateDirectories("/proc"))
-        {
-            var file = Path.Combine(directory, "cmdline");
-            string command;
-            try { command = File.ReadAllText(file).Replace('\0', ' '); }
-            catch { continue; }
-            yield return command;
-        }
-    }
-
     private sealed class TransactionFixture : IDisposable
     {
         private readonly IReadOnlyDictionary<string, string> before;
@@ -115,7 +139,9 @@ public sealed class UpdateTransactionTests
             File.WriteAllText(path, "#!/bin/sh\nif [ $# -eq 0 ]; then\n" +
                 "  echo '7-Zip 26.02'\n  exit 0\nfi\nif [ \"$1\" = \"l\" ]; then\n" +
                 "  printf '%s\\n' '----------' 'Path = tool' 'Size = 1' ''\n" +
-                "  exit 0\nfi\nsleep 60\n");
+                "  exit 0\nfi\nexec 3<&0\n" +
+                "(printf 'ready\\n' >&2; IFS= read -r line <&3) &\n" +
+                "exec 1>&- 2>&-\nwait\n");
             File.SetUnixFileMode(path, File.GetUnixFileMode(path) | UnixFileMode.UserExecute);
             return path;
         }

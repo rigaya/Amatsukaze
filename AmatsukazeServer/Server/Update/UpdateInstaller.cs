@@ -45,13 +45,16 @@ namespace Amatsukaze.Server.Update
         private readonly string executableRoot;
         private readonly Func<DateTime> clock;
         private readonly UpdateOSKind os;
+        private readonly Func<string, string, CancellationToken, Task<UpdateExecutableProbeResult>> probeExecutable;
 
         public UpdateInstaller(string appRoot, Func<DateTime> clock = null,
-            UpdateOSKind? os = null)
+            UpdateOSKind? os = null,
+            Func<string, string, CancellationToken, Task<UpdateExecutableProbeResult>> probeExecutable = null)
         {
             this.appRoot = Path.GetFullPath(appRoot);
             executableRoot = Path.GetFullPath(Path.Combine(this.appRoot, "exe_files"));
             this.clock = clock;
+            this.probeExecutable = probeExecutable ?? UpdateExecutableProbe.RunAsync;
             this.os = os ?? (OperatingSystem.IsWindows()
                 ? UpdateOSKind.Windows : UpdateOSKind.Linux);
         }
@@ -111,7 +114,7 @@ namespace Amatsukaze.Server.Update
                     ("backup", backup ?? "(none)"), ("replaced", destination),
                     ("operation", "atomic_rename"));
 
-                var probe = await UpdateExecutableProbe.RunAsync(destination,
+                var probe = await probeExecutable(destination,
                     target.VersionArgument, cancellationToken).ConfigureAwait(false);
                 var match = target.VersionRegex?.Match(probe.Output ?? string.Empty);
                 var actualVersion = match?.Success == true
@@ -214,7 +217,7 @@ namespace Amatsukaze.Server.Update
                     ("backup", oldMoved ? old : "(none)"),
                     ("replaced", destination), ("operation", "directory_rename"));
 
-                var probe = await UpdateExecutableProbe.RunAsync(executable,
+                var probe = await probeExecutable(executable,
                     target.VersionArgument, cancellationToken).ConfigureAwait(false);
                 var match = target.VersionRegex?.Match(probe.Output ?? string.Empty);
                 var actualVersion = match?.Success == true

@@ -11,7 +11,23 @@ namespace Amatsukaze.Server.Update
     {
         // AV が展開直後のファイルを削除するケースを設置前に拾うための猶予。
         // 1秒は経験的な値であり、直後のバージョン実行が本命の検出手段になる。
-        private static readonly TimeSpan AntivirusDeletionGrace = TimeSpan.FromSeconds(1);
+        private static readonly TimeSpan DefaultAntivirusDeletionGrace = TimeSpan.FromSeconds(1);
+        private readonly TimeSpan antivirusDeletionGrace;
+        private readonly TimeProvider clock;
+        private readonly Func<string, string, CancellationToken, Task<UpdateExecutableProbeResult>> probeExecutable;
+
+        public UpdateStaging() : this(DefaultAntivirusDeletionGrace, TimeProvider.System,
+            UpdateExecutableProbe.RunAsync)
+        {
+        }
+
+        internal UpdateStaging(TimeSpan antivirusDeletionGrace, TimeProvider clock,
+            Func<string, string, CancellationToken, Task<UpdateExecutableProbeResult>> probeExecutable)
+        {
+            this.antivirusDeletionGrace = antivirusDeletionGrace;
+            this.clock = clock;
+            this.probeExecutable = probeExecutable;
+        }
 
         public async Task<PreparedUpdate> PrepareAsync(UpdateTargetDef target,
             ExtractionResult extraction, string expectedVersion, UpdateLog log,
@@ -38,7 +54,7 @@ namespace Amatsukaze.Server.Update
                 var mode = File.GetUnixFileMode(selected.Path);
                 File.SetUnixFileMode(selected.Path, mode | UnixFileMode.UserExecute);
             }
-            await Task.Delay(AntivirusDeletionGrace, cancellationToken).ConfigureAwait(false);
+            await Task.Delay(antivirusDeletionGrace, clock, cancellationToken).ConfigureAwait(false);
             var existsAfterGrace = File.Exists(selected.Path);
             long sizeAfterGrace = 0;
             try
@@ -64,13 +80,13 @@ namespace Amatsukaze.Server.Update
                     ("expect", selected.Path),
                     ("exists", existsAfterGrace ? "yes" : "no"),
                     ("extracted_size", sizeAfterGrace),
-                    ("recheck_after", AntivirusDeletionGrace.TotalMilliseconds + "ms"),
+                    ("recheck_after", antivirusDeletionGrace.TotalMilliseconds + "ms"),
                     ("hint", hint));
                 throw new UpdatePreparationException("ANTIVIRUS_SUSPECTED", "S09_STAGE",
                     "配置対象ファイルが消失または空になりました。" + hint);
             }
 
-            var probe = await UpdateExecutableProbe.RunAsync(selected.Path, target.VersionArgument,
+            var probe = await probeExecutable(selected.Path, target.VersionArgument,
                 cancellationToken)
                 .ConfigureAwait(false);
             var match = target.VersionRegex?.Match(probe.Output ?? string.Empty);

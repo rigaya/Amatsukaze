@@ -26,7 +26,8 @@ namespace Amatsukaze.Server.Update
             "objects.githubusercontent.com",
         };
 
-        public static async Task LogEnvironmentAsync(UpdateLog log, string installRoot)
+        public static async Task LogEnvironmentAsync(UpdateLog log, string installRoot,
+            TimeSpan? commandTimeout = null)
         {
             var appRoot = Safe(() => Path.GetFullPath(AppContext.BaseDirectory)).ToString();
             var values = new List<(string Key, object Value)>
@@ -65,7 +66,8 @@ namespace Amatsukaze.Server.Update
                     "[Console]::OutputEncoding=[Text.Encoding]::UTF8; " +
                     "Get-CimInstance -Namespace root/SecurityCenter2 -ClassName AntiVirusProduct | " +
                     "Select-Object -ExpandProperty displayName",
-                }).ConfigureAwait(false)));
+                }, commandTimeout ?? TimeSpan.FromSeconds(5))
+                    .ConfigureAwait(false)));
             }
             else
             {
@@ -124,8 +126,22 @@ namespace Amatsukaze.Server.Update
             return false;
         }
 
+        internal sealed record NetworkProbes(
+            Func<string, Task<string>> ResolveHostAsync,
+            Func<string, Task<string>> ProbeTcpAsync,
+            Func<string, Task<(string Protocol, string Issuer, string Result)>> ProbeTlsAsync);
+
+        internal static NetworkProbes LiveNetworkProbes { get; } =
+            CreateNetworkProbes(TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(5));
+
+        internal static NetworkProbes CreateNetworkProbes(TimeSpan lookupTimeout, TimeSpan tlsTimeout) =>
+            new NetworkProbes(
+                host => ResolveHostAsync(host, lookupTimeout),
+                host => ProbeTcpAsync(host, lookupTimeout),
+                host => ProbeTlsAsync(host, tlsTimeout));
+
         public static async Task LogDnsFailureAsync(UpdateLog log, string target,
-            Exception exception, string apiHost = null)
+            Exception exception, string apiHost, NetworkProbes probes)
         {
             var values = new List<(string Key, object Value)>
             {
@@ -137,11 +153,11 @@ namespace Amatsukaze.Server.Update
             {
                 var host = diagnosticHosts[index];
                 values.Add((index == 0 ? "api_dns" : "objects_dns",
-                    await ResolveHostAsync(host).ConfigureAwait(false)));
+                    await probes.ResolveHostAsync(host).ConfigureAwait(false)));
                 values.Add((index == 0 ? "api_tcp443" : "objects_tcp443",
-                    await ProbeTcpAsync(host).ConfigureAwait(false)));
+                    await probes.ProbeTcpAsync(host).ConfigureAwait(false)));
             }
-            var tls = await ProbeTlsAsync(diagnosticHosts[0]).ConfigureAwait(false);
+            var tls = await probes.ProbeTlsAsync(diagnosticHosts[0]).ConfigureAwait(false);
             values.Add(("tls", tls.Protocol));
             values.Add(("cert_issuer", tls.Issuer));
             values.Add(("tls_probe", tls.Result));
@@ -152,7 +168,7 @@ namespace Amatsukaze.Server.Update
         }
 
         public static async Task LogConnectionFailureAsync(UpdateLog log, string target,
-            Exception exception, string apiHost = null)
+            Exception exception, string apiHost, NetworkProbes probes)
         {
             var values = new List<(string Key, object Value)>
             {
@@ -164,11 +180,11 @@ namespace Amatsukaze.Server.Update
             {
                 var host = diagnosticHosts[index];
                 values.Add((index == 0 ? "api_dns" : "objects_dns",
-                    await ResolveHostAsync(host).ConfigureAwait(false)));
+                    await probes.ResolveHostAsync(host).ConfigureAwait(false)));
                 values.Add((index == 0 ? "api_tcp443" : "objects_tcp443",
-                    await ProbeTcpAsync(host).ConfigureAwait(false)));
+                    await probes.ProbeTcpAsync(host).ConfigureAwait(false)));
             }
-            var tls = await ProbeTlsAsync(diagnosticHosts[0]).ConfigureAwait(false);
+            var tls = await probes.ProbeTlsAsync(diagnosticHosts[0]).ConfigureAwait(false);
             values.Add(("tls", tls.Protocol));
             values.Add(("cert_issuer", tls.Issuer));
             values.Add(("tls_probe", tls.Result));
@@ -179,9 +195,9 @@ namespace Amatsukaze.Server.Update
         }
 
         public static async Task LogTlsFailureAsync(UpdateLog log, string target,
-            Exception exception, string apiHost = null)
+            Exception exception, string apiHost, NetworkProbes probes)
         {
-            var probe = await ProbeTlsAsync(apiHost ?? DiagnosticHosts[0]).ConfigureAwait(false);
+            var probe = await probes.ProbeTlsAsync(apiHost ?? DiagnosticHosts[0]).ConfigureAwait(false);
             log.WriteDiagnostic(target, "S03_CONNECT",
                 ("code", "TLS_FAILED"),
                 ("type", exception?.GetType().Name),
@@ -382,7 +398,8 @@ namespace Amatsukaze.Server.Update
             return string.Join(",", values);
         }
 
-        private static async Task<string> SafeCommandAsync(string executable, IReadOnlyList<string> arguments)
+        private static async Task<string> SafeCommandAsync(string executable, IReadOnlyList<string> arguments,
+            TimeSpan commandTimeout)
         {
             try
             {
@@ -407,7 +424,7 @@ namespace Amatsukaze.Server.Update
                 }
                 var stdout = process.StandardOutput.ReadToEndAsync();
                 var stderr = process.StandardError.ReadToEndAsync();
-                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                using var timeout = new CancellationTokenSource(commandTimeout);
                 try
                 {
                     await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
@@ -433,11 +450,11 @@ namespace Amatsukaze.Server.Update
             }
         }
 
-        private static async Task<string> ResolveHostAsync(string host)
+        private static async Task<string> ResolveHostAsync(string host, TimeSpan lookupTimeout)
         {
             try
             {
-                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+                using var timeout = new CancellationTokenSource(lookupTimeout);
                 var addresses = await Dns.GetHostAddressesAsync(host, timeout.Token).ConfigureAwait(false);
                 return addresses.Length == 0 ? "(none)" : string.Join(",", addresses.Select(address => address.ToString()));
             }
@@ -447,11 +464,11 @@ namespace Amatsukaze.Server.Update
             }
         }
 
-        private static async Task<string> ProbeTcpAsync(string host)
+        private static async Task<string> ProbeTcpAsync(string host, TimeSpan lookupTimeout)
         {
             try
             {
-                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+                using var timeout = new CancellationTokenSource(lookupTimeout);
                 using var client = new TcpClient();
                 await client.ConnectAsync(host, 443, timeout.Token).ConfigureAwait(false);
                 return "ok";
@@ -462,12 +479,12 @@ namespace Amatsukaze.Server.Update
             }
         }
 
-        private static async Task<(string Protocol, string Issuer, string Result)> ProbeTlsAsync(string host)
+        private static async Task<(string Protocol, string Issuer, string Result)> ProbeTlsAsync(string host, TimeSpan tlsTimeout)
         {
             X509Certificate certificate = null;
             try
             {
-                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                using var timeout = new CancellationTokenSource(tlsTimeout);
                 using var client = new TcpClient();
                 await client.ConnectAsync(host, 443, timeout.Token).ConfigureAwait(false);
                 using var stream = new SslStream(client.GetStream(), false,

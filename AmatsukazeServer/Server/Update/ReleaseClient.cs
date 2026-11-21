@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Net;
@@ -37,17 +36,29 @@ namespace Amatsukaze.Server.Update
         private const int MaxAttempts = 3;
         private const string DefaultApiBaseUrl = "https://api.github.com/";
         private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(30);
-        private static readonly TimeSpan DefaultRequestTimeout = TimeSpan.FromSeconds(8);
+        private static readonly UpdateHttpTiming DefaultTiming = new UpdateHttpTiming(TimeProvider.System,
+            TimeSpan.FromSeconds(8), TimeSpan.FromMilliseconds(250));
         private readonly object cacheLock = new object();
         private readonly Dictionary<string, (DateTime CachedAtUtc, IReadOnlyList<ReleaseInfo> Releases)> cache =
             new Dictionary<string, (DateTime, IReadOnlyList<ReleaseInfo>)>(StringComparer.OrdinalIgnoreCase);
         private readonly HttpClient client;
         private readonly Uri apiBaseUri;
-        private readonly TimeSpan requestTimeout;
+        private readonly UpdateHttpTiming timing;
+        private readonly Func<string, CancellationToken, Task<IPAddress[]>> resolveHost;
+        private readonly UpdateDiagnostics.NetworkProbes networkProbes;
         private readonly string diagnosticApiHost;
 
         public ReleaseClient(string proxy, string apiBaseUrl = null,
             TimeSpan? requestTimeout = null)
+            : this(UpdateHttpClientFactory.Create(proxy, githubApi: true), apiBaseUrl,
+                requestTimeout.HasValue ? DefaultTiming with { Timeout = requestTimeout.Value } : DefaultTiming,
+                Dns.GetHostAddressesAsync, UpdateDiagnostics.LiveNetworkProbes)
+        {
+        }
+
+        internal ReleaseClient(HttpClient client, string apiBaseUrl, UpdateHttpTiming timing,
+            Func<string, CancellationToken, Task<IPAddress[]>> resolveHost,
+            UpdateDiagnostics.NetworkProbes networkProbes)
         {
             var effectiveBaseUrl = string.IsNullOrWhiteSpace(apiBaseUrl)
                 ? DefaultApiBaseUrl : apiBaseUrl;
@@ -55,8 +66,10 @@ namespace Amatsukaze.Server.Update
                 new Uri(effectiveBaseUrl, UriKind.Absolute).Host;
             apiBaseUri = new Uri(EnsureTrailingSlash(effectiveBaseUrl),
                 UriKind.Absolute);
-            this.requestTimeout = requestTimeout ?? DefaultRequestTimeout;
-            client = UpdateHttpClientFactory.Create(proxy, githubApi: true);
+            this.client = client;
+            this.timing = timing;
+            this.resolveHost = resolveHost;
+            this.networkProbes = networkProbes;
         }
 
         public void ClearCache()
@@ -75,7 +88,7 @@ namespace Amatsukaze.Server.Update
             lock (cacheLock)
             {
                 if (cache.TryGetValue(cacheKey, out var cached) &&
-                    DateTime.UtcNow - cached.CachedAtUtc < CacheDuration)
+                    timing.Clock.GetUtcNow().UtcDateTime - cached.CachedAtUtc < CacheDuration)
                 {
                     var first = cached.Releases.FirstOrDefault();
                     log.Write(target, "S03_CONNECT", "OK",
@@ -96,9 +109,8 @@ namespace Amatsukaze.Server.Update
                 IReadOnlyList<IPAddress> addresses;
                 try
                 {
-                    using var dnsTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                    dnsTimeout.CancelAfter(requestTimeout);
-                    addresses = await Dns.GetHostAddressesAsync(apiBaseUri.Host, dnsTimeout.Token)
+                    using var dnsTimeout = timing.StartDeadline(cancellationToken);
+                    addresses = await resolveHost(apiBaseUri.Host, dnsTimeout.Token)
                         .ConfigureAwait(false);
                 }
                 catch (Exception ex) when (ex is SocketException || ex is OperationCanceledException)
@@ -106,7 +118,7 @@ namespace Amatsukaze.Server.Update
                     lastException = ex;
                     if (attempt < MaxAttempts && !cancellationToken.IsCancellationRequested)
                     {
-                        await Task.Delay(TimeSpan.FromMilliseconds(250 * attempt), cancellationToken)
+                        await timing.WaitBeforeRetryAsync(attempt, cancellationToken)
                             .ConfigureAwait(false);
                         continue;
                     }
@@ -115,23 +127,22 @@ namespace Amatsukaze.Server.Update
                         ("type", ex.GetType().Name),
                         ("attempt", attempt + "/" + MaxAttempts));
                     await UpdateDiagnostics.LogDnsFailureAsync(log, target, ex,
-                        diagnosticApiHost).ConfigureAwait(false);
+                        diagnosticApiHost, networkProbes).ConfigureAwait(false);
                     return null;
                 }
 
-                var stopwatch = Stopwatch.StartNew();
+                var started = timing.Clock.GetTimestamp();
                 using var request = new HttpRequestMessage(HttpMethod.Get,
                     new Uri(apiBaseUri, "repos/" + repository +
                     (listReleases ? "/releases?per_page=30" : "/releases/latest")));
                 try
                 {
-                    using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                    timeout.CancelAfter(requestTimeout);
+                    using var timeout = timing.StartDeadline(cancellationToken);
                     using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead,
                         timeout.Token).ConfigureAwait(false);
                     var headers = CollectHeaders(response);
                     var responseBody = await response.Content.ReadAsStringAsync(timeout.Token).ConfigureAwait(false);
-                    stopwatch.Stop();
+                    var elapsed = timing.Clock.GetElapsedTime(started);
                     var rateRemaining = GetHeader(headers, "X-RateLimit-Remaining");
                     var rateReset = FormatRateLimitReset(GetHeader(headers, "X-RateLimit-Reset"));
                     if (!response.IsSuccessStatusCode)
@@ -140,7 +151,7 @@ namespace Amatsukaze.Server.Update
                             response.StatusCode == HttpStatusCode.TooManyRequests;
                         if (retryable && attempt < MaxAttempts)
                         {
-                            await Task.Delay(TimeSpan.FromMilliseconds(250 * attempt), cancellationToken)
+                            await timing.WaitBeforeRetryAsync(attempt, cancellationToken)
                                 .ConfigureAwait(false);
                             continue;
                         }
@@ -148,7 +159,7 @@ namespace Amatsukaze.Server.Update
                             ("host", apiBaseUri.Host),
                             ("dns", string.Join(",", addresses)),
                             ("status", (int)response.StatusCode),
-                            ("elapsed", stopwatch.ElapsedMilliseconds + "ms"),
+                            ("elapsed", (long)elapsed.TotalMilliseconds + "ms"),
                             ("ratelimit", rateRemaining),
                             ("reset", rateReset),
                             ("attempt", attempt + "/" + MaxAttempts));
@@ -168,13 +179,13 @@ namespace Amatsukaze.Server.Update
                         ("dns", string.Join(",", addresses)),
                         ("tls", "ok"),
                         ("status", (int)response.StatusCode),
-                        ("elapsed", stopwatch.ElapsedMilliseconds + "ms"),
+                        ("elapsed", (long)elapsed.TotalMilliseconds + "ms"),
                         ("ratelimit", rateRemaining),
                         ("reset", rateReset),
                         ("attempt", attempt + "/" + MaxAttempts));
                     lock (cacheLock)
                     {
-                        cache[cacheKey] = (DateTime.UtcNow, releases);
+                        cache[cacheKey] = (timing.Clock.GetUtcNow().UtcDateTime, releases);
                     }
                     return releases;
                 }
@@ -187,11 +198,11 @@ namespace Amatsukaze.Server.Update
                     }
                     log.Write(target, "S03_CONNECT", "NG",
                         ("code", "CONNECT_TIMEOUT"),
-                        ("timeout", requestTimeout.TotalSeconds + "s"),
-                        ("elapsed", stopwatch.ElapsedMilliseconds + "ms"),
+                        ("timeout", timing.Timeout.TotalSeconds + "s"),
+                        ("elapsed", (long)timing.Clock.GetElapsedTime(started).TotalMilliseconds + "ms"),
                         ("attempt", attempt + "/" + MaxAttempts));
                     await UpdateDiagnostics.LogConnectionFailureAsync(log, target, ex,
-                        diagnosticApiHost).ConfigureAwait(false);
+                        diagnosticApiHost, networkProbes).ConfigureAwait(false);
                     return null;
                 }
                 catch (HttpRequestException ex) when (FindInner<AuthenticationException>(ex) != null)
@@ -203,7 +214,7 @@ namespace Amatsukaze.Server.Update
                         ("msg", ex.Message),
                         ("attempt", attempt + "/" + MaxAttempts));
                     await UpdateDiagnostics.LogTlsFailureAsync(log, target, ex,
-                        diagnosticApiHost).ConfigureAwait(false);
+                        diagnosticApiHost, networkProbes).ConfigureAwait(false);
                     return null;
                 }
                 catch (HttpRequestException ex)
@@ -219,7 +230,7 @@ namespace Amatsukaze.Server.Update
                         ("msg", ex.Message),
                         ("attempt", attempt + "/" + MaxAttempts));
                     await UpdateDiagnostics.LogConnectionFailureAsync(log, target, ex,
-                        diagnosticApiHost).ConfigureAwait(false);
+                        diagnosticApiHost, networkProbes).ConfigureAwait(false);
                     return null;
                 }
                 catch (JsonException ex)

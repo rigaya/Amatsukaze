@@ -10,8 +10,6 @@ namespace AmatsukazeServerTest;
 
 public sealed class ClientManagerTests
 {
-    private static readonly TimeSpan TestTimeout = TimeSpan.FromSeconds(15);
-
     [Fact]
     public void 通知音の準備に失敗しても呼び出し元に例外を伝播しない()
     {
@@ -40,8 +38,7 @@ public sealed class ClientManagerTests
         var local = client.LocalIP;
 
         // 送信側と受信側が同時に切断を検出しても、二重の終了処理は安全であること。
-        await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => Task.Run(client.Close)))
-            .WaitAsync(TestTimeout);
+        await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => Task.Run(client.Close)));
 
         Assert.Equal(remote, client.RemoteIP);
         Assert.Equal(local, client.LocalIP);
@@ -61,7 +58,7 @@ public sealed class ClientManagerTests
 
         // Start が最初の await で中断せずに終了する経路を確実に通す。
         client.Close();
-        await client.Start().WaitAsync(TestTimeout);
+        await client.Start();
 
         Assert.Empty(manager.ClientList);
         Assert.False(manager.HasLocalClient());
@@ -84,55 +81,83 @@ public sealed class ClientManagerTests
                 allRemoved.TrySetResult();
         };
 
-        var listening = manager.Listen(0);
-        // OS が選んだポートを使い、テスト間のポート取り合いを避ける。
-        var listener = (TcpListener)typeof(ClientManager)
-            .GetField("listener", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(manager)!;
-        var endpoint = new IPEndPoint(IPAddress.Loopback, ((IPEndPoint)listener.LocalEndpoint).Port);
+        var ready = new TaskCompletionSource<IPEndPoint>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var listening = manager.Listen(0, IPAddress.Loopback, endpoint => ready.TrySetResult(endpoint),
+            retryOnFailure: false);
         var peers = new List<TcpClient>();
-        var begin = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var notifications = Task.Run(async () =>
-        {
-            await begin.Task;
-            for (var i = 0; i < connectionCount * 4; i++)
-            {
-                manager.HasLocalClient();
-                manager.GetMacAddress();
-                await manager.OnLogFile("接続競合の回帰テスト");
-                await Task.Yield();
-            }
-        });
+        var notifyDuringRegistration = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var registeringNotifications = NotifyAsync(notifyDuringRegistration.Task);
 
         try
         {
-            begin.SetResult();
+            await AwaitWhileListening(ready.Task, listening);
+            var endpoint = await ready.Task;
             for (var i = 0; i < connectionCount; i++)
             {
                 var peer = new TcpClient();
                 peers.Add(peer);
-                await peer.ConnectAsync(endpoint).WaitAsync(TestTimeout);
-                Assert.True(await registered.WaitAsync(TestTimeout), "接続が登録されませんでした。");
+                await peer.ConnectAsync(endpoint);
+                await AwaitWhileListening(registered.WaitAsync(), listening);
+                if (i == 0) notifyDuringRegistration.SetResult();
                 // 登録と切断を交互に発生させ、一覧の読み取りと競合させる。
                 if (i % 2 == 0)
                     peer.Dispose();
             }
 
-            await Task.WhenAll(
-                notifications,
-                Task.Run(() => peers.ForEach(peer => peer.Dispose())),
-                Task.Run(manager.Finish)).WaitAsync(TestTimeout);
-            await allRemoved.Task.WaitAsync(TestTimeout);
-            await listening.WaitAsync(TestTimeout);
+            var begin = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var finishingNotifications = NotifyAsync(begin.Task);
+            var disconnecting = AfterBeginAsync(() =>
+            {
+                peers.ForEach(peer => peer.Dispose());
+                return Task.CompletedTask;
+            });
+            var finishing = AfterBeginAsync(() =>
+            {
+                manager.Finish();
+                return Task.CompletedTask;
+            });
+            begin.SetResult();
+            await Task.WhenAll(registeringNotifications, finishingNotifications,
+                disconnecting, finishing, listening);
+            await allRemoved.Task;
 
             Assert.Empty(manager.ClientList);
             Assert.False(manager.HasLocalClient());
+
+            async Task AfterBeginAsync(Func<Task> action)
+            {
+                await begin.Task;
+                await action();
+            }
         }
         finally
         {
             peers.ForEach(peer => peer.Dispose());
             manager.Finish();
-            await listening.WaitAsync(TestTimeout);
-            await notifications.WaitAsync(TestTimeout);
+            notifyDuringRegistration.TrySetResult();
+            await Task.WhenAll(listening, registeringNotifications);
         }
+
+        async Task NotifyAsync(Task begin)
+        {
+            await begin;
+            for (var i = 0; i < connectionCount * 4; i++)
+            {
+                manager.HasLocalClient();
+                manager.GetMacAddress();
+                await manager.OnLogFile("接続競合の回帰テスト");
+            }
+        }
+    }
+
+    private static async Task AwaitWhileListening(Task milestone, Task listening)
+    {
+        if (await Task.WhenAny(milestone, listening) == listening)
+        {
+            await listening;
+            Assert.Fail("接続の合図を受ける前に待ち受けが終了した");
+        }
+        await milestone;
     }
 }

@@ -16,7 +16,7 @@ public sealed class SystemUtilityWindowsTests
         using var receiver = SystemUtility.CreateMailslot(path);
         Assert.Equal(MailslotRequestStatus.Sent, SystemUtility.RequestMailslot(path).Status);
         var buffer = new byte[1];
-        Assert.Equal(1, await receiver.ReadAsync(buffer, 0, 1).WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.Equal(1, await receiver.ReadAsync(buffer, 0, 1));
     }
 
     [Fact]

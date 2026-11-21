@@ -20,16 +20,18 @@ namespace Amatsukaze.Server.Rest
             WriteIndented = true
         };
         private readonly string filePath;
+        private readonly TimeProvider clock;
         private CmSegAnnotation annotation;
         private string expectedFileHash;
 
         public static bool IsEnabled => Environment.GetEnvironmentVariable("AMT_CMSEG_ANNOTATION") == "1";
 
-        private CmSegAnnotationStore(string filePath, CmSegAnnotation annotation, string expectedFileHash)
+        private CmSegAnnotationStore(string filePath, CmSegAnnotation annotation, string expectedFileHash, TimeProvider clock)
         {
             this.filePath = filePath;
             this.annotation = annotation;
             this.expectedFileHash = expectedFileHash;
+            this.clock = clock;
         }
 
         // 正解入力の初期化失敗を、映像を開く既存処理から切り離す。
@@ -76,7 +78,11 @@ namespace Amatsukaze.Server.Rest
             return FormattableString.Invariant($"{90000 / divisor}/{ticks / divisor}");
         }
 
-        public static CmSegAnnotationStore Open(string srcPath, string tempDir, int numFrames, string fps, List<JlsSegment> segments)
+        public static CmSegAnnotationStore Open(string srcPath, string tempDir, int numFrames, string fps, List<JlsSegment> segments) =>
+            Open(srcPath, tempDir, numFrames, fps, segments, TimeProvider.System);
+
+        internal static CmSegAnnotationStore Open(string srcPath, string tempDir, int numFrames, string fps,
+            List<JlsSegment> segments, TimeProvider clock)
         {
             if (!IsEnabled) return null;
             lock (FileSync)
@@ -88,7 +94,7 @@ namespace Amatsukaze.Server.Rest
                     Source = new CmSegSource { Path = srcPath, Size = source.Length, Mtime = source.LastWriteTimeUtc },
                     TempDir = tempDir, NumFrames = numFrames, Fps = fps,
                     JlsSha1 = File.Exists(jlsPath) ? Convert.ToHexString(SHA1.HashData(File.ReadAllBytes(jlsPath))).ToLowerInvariant() : "",
-                    UpdatedAt = DateTime.UtcNow,
+                    UpdatedAt = clock.GetUtcNow().UtcDateTime,
                     Segments = segments.Select((s, i) => new CmSegAnnotationSegment
                     {
                         Idx = i + 1, Start = s.Start, End = s.End, JlsLabel = s.Label, JlsKeep = s.JlsKeep,
@@ -116,12 +122,12 @@ namespace Amatsukaze.Server.Rest
                     }
                     else
                     {
-                        var backup = srcPath + ".cmseg." + DateTime.UtcNow.ToString("yyyyMMddHHmmssfffffff", CultureInfo.InvariantCulture) + ".bak.json";
+                        var backup = srcPath + ".cmseg." + clock.GetUtcNow().UtcDateTime.ToString("yyyyMMddHHmmssfffffff", CultureInfo.InvariantCulture) + ".bak.json";
                         File.Move(path, backup);
                         initial.Warning = $"正解ファイルとjls区間が一致しないか形式が不正なため、旧ファイルを退避して初期化しました: {backup}";
                     }
                 }
-                return new CmSegAnnotationStore(path, initial, fileHash);
+                return new CmSegAnnotationStore(path, initial, fileHash, clock);
             }
         }
 
@@ -174,7 +180,7 @@ namespace Amatsukaze.Server.Rest
                     segment.Edited = label != CmSegLabels.InitialLabel(segment.JlsLabel, segment.JlsKeep);
                 }
                 next.Reviewed = request.Reviewed;
-                next.UpdatedAt = DateTime.UtcNow;
+                next.UpdatedAt = clock.GetUtcNow().UtcDateTime;
                 next.Warning = null;
                 var temporary = filePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
                 try

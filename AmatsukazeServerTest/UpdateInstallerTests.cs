@@ -373,7 +373,8 @@ public sealed class UpdateInstallerTests
             var instant = DateTime.ParseExact(item.Item1, "yyyyMMdd-HHmmss",
                 System.Globalization.CultureInfo.InvariantCulture,
                 System.Globalization.DateTimeStyles.None);
-            var installer = new UpdateInstaller(fixture.Root, () => instant);
+            var installer = new UpdateInstaller(fixture.Root, () => instant,
+                probeExecutable: UpdateExecutableProbe.RunWithoutTimeoutAsync);
             using var log = new UpdateLog(fixture.Root);
             await installer.InstallAsync(fixture.Target,
                 fixture.CreatePrepared("tool", item.Item2), item.Item2, log,
@@ -791,7 +792,7 @@ public sealed class UpdateInstallerTests
 
     private static async Task<string> RunAsync(string path)
     {
-        var result = await UpdateExecutableProbe.RunAsync(path, "--version",
+        var result = await UpdateExecutableProbe.RunWithoutTimeoutAsync(path, "--version",
             CancellationToken.None);
         return result.Output;
     }
@@ -806,7 +807,8 @@ public sealed class UpdateInstallerTests
             ExeFiles = Path.Combine(Root, "exe_files");
             Directory.CreateDirectory(ExeFiles);
             Installer = new UpdateInstaller(Root,
-                () => new DateTime(2026, 8, 11, 12, 34, 56, DateTimeKind.Utc));
+                () => new DateTime(2026, 8, 11, 12, 34, 56, DateTimeKind.Utc),
+                probeExecutable: UpdateExecutableProbe.RunWithoutTimeoutAsync);
             Target = new UpdateTargetDef
             {
                 Id = "test",
@@ -829,7 +831,8 @@ public sealed class UpdateInstallerTests
 
         public UpdateInstaller CreateInstaller(UpdateOSKind os, DateTime? instant = null) =>
             new UpdateInstaller(Root, () => instant ??
-                new DateTime(2026, 8, 11, 12, 34, 56, DateTimeKind.Utc), os);
+                new DateTime(2026, 8, 11, 12, 34, 56, DateTimeKind.Utc), os,
+                UpdateExecutableProbe.RunWithoutTimeoutAsync);
 
         public UpdateTargetDef CreateSubDirectoryTarget(string id, string executableName)
         {

@@ -32,11 +32,21 @@ namespace Amatsukaze.Server.Update
             };
         private readonly string extractorPath;
         private readonly ArchiveSafetyLimits limits;
+        private readonly Func<ProcessStartInfo, Process> startProcess;
+        private readonly Action<Process, Task> observeOutputDrain;
 
         public ArchiveExtractor(string extractorPath, ArchiveSafetyLimits limits = null)
+            : this(extractorPath, limits, Process.Start)
+        {
+        }
+
+        internal ArchiveExtractor(string extractorPath, ArchiveSafetyLimits limits,
+            Func<ProcessStartInfo, Process> startProcess, Action<Process, Task> observeOutputDrain = null)
         {
             this.extractorPath = extractorPath;
             this.limits = limits ?? new ArchiveSafetyLimits();
+            this.startProcess = startProcess;
+            this.observeOutputDrain = observeOutputDrain;
         }
 
         public async Task<ExtractionResult> ExtractAsync(DownloadResult download,
@@ -291,17 +301,21 @@ namespace Amatsukaze.Server.Update
             CancellationToken cancellationToken)
         {
             using var process = StartProcess(arguments, redirectOutput: true);
-            var stdout = process.StandardOutput.ReadToEndAsync(cancellationToken);
-            var stderr = process.StandardError.ReadToEndAsync(cancellationToken);
+            using var stdoutReader = process.StandardOutput;
+            using var stderrReader = process.StandardError;
+            var stdout = stdoutReader.ReadToEndAsync();
+            var stderr = stderrReader.ReadToEndAsync();
+            var drain = Task.WhenAll(stdout, stderr);
             try
             {
+                observeOutputDrain?.Invoke(process, drain);
                 await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
-                return new ProcessResult(process.ExitCode, null, await stdout.ConfigureAwait(false),
-                    await stderr.ConfigureAwait(false));
+                var output = await drain.WaitAsync(cancellationToken).ConfigureAwait(false);
+                return new ProcessResult(process.ExitCode, null, output[0], output[1]);
             }
             catch
             {
-                KillTree(process);
+                await StopAsync(process, drain).ConfigureAwait(false);
                 throw;
             }
         }
@@ -311,16 +325,17 @@ namespace Amatsukaze.Server.Update
             CancellationToken cancellationToken)
         {
             using var first = StartProcess(firstArguments, redirectOutput: true);
-            using var second = StartProcess(secondArguments, redirectOutput: captureSecondOutput,
-                redirectInput: true);
-            var firstError = first.StandardError.ReadToEndAsync(cancellationToken);
-            var secondError = second.StandardError.ReadToEndAsync(cancellationToken);
-            var secondOutput = captureSecondOutput
-                ? second.StandardOutput.ReadToEndAsync(cancellationToken) : Task.FromResult(string.Empty);
-            var transfer = TransferAndCloseAsync(first.StandardOutput.BaseStream,
-                second.StandardInput.BaseStream, cancellationToken);
+            Process second = null;
             try
             {
+                second = StartProcess(secondArguments, redirectOutput: captureSecondOutput,
+                    redirectInput: true);
+                var firstError = first.StandardError.ReadToEndAsync(cancellationToken);
+                var secondError = second.StandardError.ReadToEndAsync(cancellationToken);
+                var secondOutput = captureSecondOutput
+                    ? second.StandardOutput.ReadToEndAsync(cancellationToken) : Task.FromResult(string.Empty);
+                var transfer = TransferAndCloseAsync(first.StandardOutput.BaseStream,
+                    second.StandardInput.BaseStream, cancellationToken);
                 await Task.WhenAll(transfer, first.WaitForExitAsync(cancellationToken),
                     second.WaitForExitAsync(cancellationToken)).ConfigureAwait(false);
                 return new ProcessResult(first.ExitCode, second.ExitCode,
@@ -329,9 +344,12 @@ namespace Amatsukaze.Server.Update
             }
             catch
             {
-                KillTree(first);
-                KillTree(second);
+                await Task.WhenAll(StopAsync(first), StopAsync(second)).ConfigureAwait(false);
                 throw;
+            }
+            finally
+            {
+                second?.Dispose();
             }
         }
 
@@ -350,7 +368,7 @@ namespace Amatsukaze.Server.Update
             {
                 start.ArgumentList.Add(argument);
             }
-            return Process.Start(start) ?? throw ExtractFailure("7-Zip を起動できませんでした");
+            return startProcess(start) ?? throw ExtractFailure("7-Zip を起動できませんでした");
         }
 
         private static async Task TransferAndCloseAsync(Stream source, Stream destination,
@@ -366,18 +384,22 @@ namespace Amatsukaze.Server.Update
             }
         }
 
-        private static void KillTree(Process process)
+        private static async Task StopAsync(Process process, Task drain = null)
         {
+            if (process == null) return;
+
             try
             {
-                if (!process.HasExited)
-                {
-                    process.Kill(entireProcessTree: true);
-                }
+                if (process.HasExited) return;
+
+                process.Kill(entireProcessTree: true);
+                await process.WaitForExitAsync().ConfigureAwait(false);
+                // 所有プロセスを停止した場合は、子孫が継承した出力端も閉じるまで待つ。
+                if (drain != null) await drain.ConfigureAwait(false);
             }
             catch
             {
-                // キャンセル後のプロセス終了競合は無視する。
+                // 終了時の競合で、元の例外を上書きしない。
             }
         }
 

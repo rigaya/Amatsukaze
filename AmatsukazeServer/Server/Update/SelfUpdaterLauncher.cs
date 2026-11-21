@@ -6,30 +6,40 @@ using System.Threading.Tasks;
 
 namespace Amatsukaze.Server.Update
 {
+    internal sealed record SelfUpdaterReadyTiming(TimeProvider Clock, TimeSpan Timeout, TimeSpan PollInterval)
+    {
+        public static SelfUpdaterReadyTiming Default { get; } =
+            new(TimeProvider.System, TimeSpan.FromSeconds(10), TimeSpan.FromMilliseconds(100));
+    }
+
     // サーバーから独立して生存する updater を起動し、待機開始の通知を確認する。
     internal static class SelfUpdaterLauncher
     {
-        private const int UpdaterReadyTimeoutSeconds = 10;
-        private const int ReadyPollMilliseconds = 100;
+        public static Task StartAndWaitReadyAsync(GeneratedSelfUpdater updater,
+            UpdateOSKind os, CancellationToken cancellationToken) =>
+            StartAndWaitReadyAsync(updater, os, cancellationToken, SelfUpdaterReadyTiming.Default,
+                static (path, targetOs) =>
+                {
+                    // setsidはforkすることがある。起動に使ったハンドルでupdaterの生死を判定しない。
+                    using (Start(path, targetOs)) { }
+                    return Task.CompletedTask;
+                });
 
-        public static async Task StartAndWaitReadyAsync(GeneratedSelfUpdater updater,
-            UpdateOSKind os, CancellationToken cancellationToken,
-            TimeSpan? readyTimeout = null, string launcherOverride = null)
+        internal static async Task StartAndWaitReadyAsync(GeneratedSelfUpdater updater,
+            UpdateOSKind os, CancellationToken cancellationToken, SelfUpdaterReadyTiming timing,
+            Func<string, UpdateOSKind, Task> launch)
         {
             ArgumentNullException.ThrowIfNull(updater);
             try
             {
                 if (File.Exists(updater.ReadyPath)) File.Delete(updater.ReadyPath);
-                // setsid は条件によって fork するため、起動時の Process は生死判定に使えない。
-                // 起動できたことだけを確認してハンドルを離し、ready ファイルだけを待つ。
-                using (Start(updater.ScriptPath, os, launcherOverride)) { }
-                var timeout = readyTimeout ?? TimeSpan.FromSeconds(UpdaterReadyTimeoutSeconds);
-                var started = Stopwatch.StartNew();
-                while (started.Elapsed < timeout)
+                await launch(updater.ScriptPath, os).ConfigureAwait(false);
+                var started = timing.Clock.GetTimestamp();
+                while (timing.Timeout == Timeout.InfiniteTimeSpan || timing.Clock.GetElapsedTime(started) < timing.Timeout)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     if (File.Exists(updater.ReadyPath)) return;
-                    await Task.Delay(ReadyPollMilliseconds, cancellationToken)
+                    await Task.Delay(timing.PollInterval, timing.Clock, cancellationToken)
                         .ConfigureAwait(false);
                 }
                 throw new UpdateInstallException("UPDATER_START_FAILED", "S01_PRECHECK",
@@ -50,8 +60,8 @@ namespace Amatsukaze.Server.Update
             }
         }
 
-        private static Process Start(string scriptPath, UpdateOSKind os,
-            string launcherOverride)
+        internal static Process Start(string scriptPath, UpdateOSKind os,
+            string launcherOverride = null)
         {
             var start = new ProcessStartInfo
             {

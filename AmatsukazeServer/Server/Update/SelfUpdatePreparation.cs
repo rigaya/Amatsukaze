@@ -118,12 +118,15 @@ namespace Amatsukaze.Server.Update
         private readonly string appRoot;
         private readonly string proxy;
         private readonly string extractorPath;
+        private readonly UpdateHttpTiming downloadTiming;
 
-        public SelfUpdatePreparation(string appRoot, string proxy, string extractorPath)
+        public SelfUpdatePreparation(string appRoot, string proxy, string extractorPath,
+            UpdateHttpTiming downloadTiming = null)
         {
             this.appRoot = Path.GetFullPath(appRoot);
             this.proxy = proxy;
             this.extractorPath = extractorPath;
+            this.downloadTiming = downloadTiming;
         }
 
         public async Task<PreparedSelfUpdate> PrepareAsync(ReleaseAssetInfo asset,
@@ -134,7 +137,8 @@ namespace Amatsukaze.Server.Update
             ArgumentNullException.ThrowIfNull(log);
             using var workspace = SelfUpdateWorkspace.Create(appRoot, log.TransactionId);
             EnsurePreconditions(workspace, asset, log);
-            using var downloader = new UpdateDownloader(proxy);
+            using var downloader = new UpdateDownloader(UpdateHttpClientFactory.Create(proxy),
+                ownsClient: true, timing: downloadTiming);
             var download = await downloader.DownloadAsync(asset, workspace.DownloadDirectory,
                 "Amatsukaze", log, progress, cancellationToken).ConfigureAwait(false);
             var extraction = await new ArchiveExtractor(extractorPath).ExtractAsync(download,

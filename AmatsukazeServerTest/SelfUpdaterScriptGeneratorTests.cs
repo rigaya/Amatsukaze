@@ -6,7 +6,7 @@ namespace AmatsukazeServerTest;
 
 public sealed class SelfUpdaterScriptGeneratorTests
 {
-    [Fact]
+    [LinuxFact]
     public async Task Linux更新スクリプトは許可規則どおりに配置する()
     {
         using var fixture = new UpdaterFixture("通常 系 空白");
@@ -14,7 +14,7 @@ public sealed class SelfUpdaterScriptGeneratorTests
         fixture.CreateInstalledFiles();
         var generated = fixture.Generate(UpdateOSKind.Linux);
 
-        var result = await RunAsync(generated.ScriptPath);
+        var result = await RunAsync(fixture, generated.ScriptPath);
 
         Assert.True(result.ExitCode == 0,
             $"exit={result.ExitCode} stdout={result.Stdout} stderr={result.Stderr}");
@@ -32,12 +32,13 @@ public sealed class SelfUpdaterScriptGeneratorTests
         Assert.False(fixture.Exists("exe_files/wwwroot/_framework/OLD.HASH.wasm"));
         Assert.Equal("new-index", fixture.Read("exe_files/wwwroot/index.html"));
         Assert.Contains("status=success", File.ReadAllText(generated.ResultPath));
+        Assert.Equal(new[] { "1" }, File.ReadAllLines(fixture.AdvancesPath));
         Assert.False(Directory.Exists(fixture.Staging));
         Assert.False(Directory.Exists(generated.BackupDirectory));
         Assert.True(File.Exists(generated.ReadyPath));
     }
 
-    [Fact]
+    [LinuxFact]
     public async Task 配置失敗時は全変更をバックアップから復元する()
     {
         using var fixture = new UpdaterFixture("rollback");
@@ -47,7 +48,7 @@ public sealed class SelfUpdaterScriptGeneratorTests
         var generated = fixture.Generate(UpdateOSKind.Linux,
             new SelfUpdaterScriptOptions(FailAfterPlacedItems: 7));
 
-        var result = await RunAsync(generated.ScriptPath);
+        var result = await RunAsync(fixture, generated.ScriptPath);
 
         Assert.NotEqual(0, result.ExitCode);
         Assert.Equal(before, fixture.Snapshot());
@@ -60,7 +61,7 @@ public sealed class SelfUpdaterScriptGeneratorTests
         Assert.Contains("avs/sample.avs", created);
     }
 
-    [Fact]
+    [LinuxFact]
     public async Task 待機タイムアウトでは既存ファイルに触れない()
     {
         using var fixture = new UpdaterFixture("timeout");
@@ -69,13 +70,15 @@ public sealed class SelfUpdaterScriptGeneratorTests
         var before = fixture.Snapshot();
         var generated = fixture.Generate(UpdateOSKind.Linux,
             new SelfUpdaterScriptOptions(WaitTimeoutSeconds: 1, PollIntervalSeconds: 1),
-            Environment.ProcessId);
+            serverPid: UpdaterFixture.ServerPid);
 
-        var result = await RunAsync(generated.ScriptPath);
+        var result = await RunAsync(fixture, generated.ScriptPath, serverIsRunning: true);
 
         Assert.Equal(2, result.ExitCode);
         Assert.Equal(before, fixture.Snapshot());
         Assert.Contains("status=timeout", File.ReadAllText(generated.ResultPath));
+        Assert.Contains("error_code=RESTART_TIMEOUT", File.ReadAllText(generated.ResultPath));
+        Assert.Equal(new[] { "1" }, File.ReadAllLines(fixture.AdvancesPath));
         Assert.True(Directory.Exists(fixture.Staging));
     }
 
@@ -157,7 +160,7 @@ public sealed class SelfUpdaterScriptGeneratorTests
         Assert.Equal("UNSAFE_SCRIPT_ARGUMENT", exception.Code);
     }
 
-    [Fact]
+    [LinuxFact]
     public async Task 再起動実行ファイルが無い場合は配置後に失敗を記録する()
     {
         using var fixture = new UpdaterFixture("restart missing");
@@ -172,7 +175,7 @@ public sealed class SelfUpdaterScriptGeneratorTests
             prepared, "1234abcd", UpdateOSKind.Linux, fixture.GeneratedAt,
             new SelfUpdaterScriptOptions(UseProcessNameFallback: false));
 
-        var result = await RunAsync(generated.ScriptPath);
+        var result = await RunAsync(fixture, generated.ScriptPath);
 
         Assert.NotEqual(0, result.ExitCode);
         Assert.Equal("new-tool", fixture.Read("exe_files/tool"));
@@ -182,22 +185,47 @@ public sealed class SelfUpdaterScriptGeneratorTests
         Assert.Contains("reason=not_executable", File.ReadAllText(generated.LogPath));
     }
 
-    private static async Task<ProcessResult> RunAsync(string scriptPath)
+    private static async Task<ProcessResult> RunAsync(UpdaterFixture fixture, string scriptPath,
+        bool serverIsRunning = false)
     {
+        // 生成されたシェルは経過秒を自分で加算する。試験ではsleepを記録だけにし、
+        // kill -0には停止待ちと再起動後のそれぞれで決まった応答を返す。
+        var shellEnvironment = Path.Combine(fixture.Root, "仮想時計.sh");
+        await File.WriteAllTextAsync(shellEnvironment, """
+            sleep() { printf '%s\n' "$1" >> "$AMT_TEST_ADVANCES"; }
+            kill() {
+                if [ "$1" != '-0' ]; then
+                    printf '未対応のkill呼び出し\n' >&2
+                    return 1
+                fi
+                if [ "$2" = "$AMT_TEST_SERVER_PID" ]; then
+                    [ "$AMT_TEST_SERVER_RUNNING" = 1 ]
+                    return
+                fi
+                return 0
+            }
+            """.ReplaceLineEndings("\n"));
         using var process = new Process
         {
             StartInfo = new ProcessStartInfo
             {
-                FileName = scriptPath,
+                FileName = "bash",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
+                StandardOutputEncoding = System.Text.Encoding.UTF8,
+                StandardErrorEncoding = System.Text.Encoding.UTF8,
                 UseShellExecute = false,
             },
         };
+        process.StartInfo.ArgumentList.Add(scriptPath);
+        process.StartInfo.Environment["BASH_ENV"] = shellEnvironment;
+        process.StartInfo.Environment["AMT_TEST_ADVANCES"] = fixture.AdvancesPath;
+        process.StartInfo.Environment["AMT_TEST_SERVER_PID"] = UpdaterFixture.ServerPid.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        process.StartInfo.Environment["AMT_TEST_SERVER_RUNNING"] = serverIsRunning ? "1" : "0";
         process.Start();
         var stdout = process.StandardOutput.ReadToEndAsync();
         var stderr = process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(15));
+        await Task.WhenAll(process.WaitForExitAsync(), stdout, stderr);
         return new ProcessResult(process.ExitCode, await stdout, await stderr);
     }
 
@@ -205,14 +233,16 @@ public sealed class SelfUpdaterScriptGeneratorTests
 
     private sealed class UpdaterFixture : IDisposable
     {
+        public const long ServerPid = 999999;
         public string Root { get; }
+        public string AdvancesPath => Path.Combine(Root, "仮想時計の経過秒.txt");
         public string AppRoot { get; }
         public string Staging { get; }
         public DateTime GeneratedAt { get; } = new DateTime(2026, 8, 12, 1, 23, 45,
             DateTimeKind.Utc);
         public PreparedSelfUpdate Prepared => new(
             Path.Combine(AppRoot, ".amatsukaze_update"), Staging, "1.0.8.8",
-            new RestartCommandLine("/bin/sleep", ["5"]));
+            new RestartCommandLine("/bin/true", []));
 
         public UpdaterFixture(string name)
         {
@@ -263,7 +293,7 @@ public sealed class SelfUpdaterScriptGeneratorTests
         }
 
         public GeneratedSelfUpdater Generate(UpdateOSKind os,
-            SelfUpdaterScriptOptions? options = null, long serverPid = 999999) =>
+            SelfUpdaterScriptOptions? options = null, long serverPid = ServerPid) =>
             SelfUpdaterScriptGenerator.Generate(AppRoot, serverPid, Prepared, "1234abcd",
                 os, GeneratedAt, (options ?? new SelfUpdaterScriptOptions()) with
                 { UseProcessNameFallback = false });

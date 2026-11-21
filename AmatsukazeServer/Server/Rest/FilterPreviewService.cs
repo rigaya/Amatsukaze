@@ -52,11 +52,17 @@ namespace Amatsukaze.Server.Rest
             public FilterPreviewEngine Engine;
             public long Generation, CommittedGeneration;
             public string FpsKey;
-            public long LastUsed = DateTime.UtcNow.Ticks;
+            private readonly TimeProvider clock;
+            public long LastUsed;
+            public Session(TimeProvider clock)
+            {
+                this.clock = clock;
+                Touch();
+            }
             public readonly SemaphoreSlim ConfigLock = new(1, 1);
             public readonly ConcurrentDictionary<string, FilterPreviewEngine.Reply> JpegCache = new();
             public readonly ConcurrentQueue<string> JpegKeys = new();
-            public void Touch() => Interlocked.Exchange(ref LastUsed, DateTime.UtcNow.Ticks);
+            public void Touch() => Interlocked.Exchange(ref LastUsed, clock.GetUtcNow().UtcTicks);
             public void Dispose()
             {
                 if (!Engine.Stop()) { Util.AddLog("[FilterPreview] エンジンを停止できず作業フォルダを残しました", null); return; }
@@ -78,15 +84,18 @@ namespace Amatsukaze.Server.Rest
         private readonly RestStateStore state;
         private readonly Func<string, FilterPreviewSourceFormat> readSourceFormat;
         private readonly ConcurrentDictionary<string, Session> sessions = new();
-        private readonly Timer timer;
+        private readonly FilterPreviewEngineTiming timing;
+        private readonly ITimer timer;
 
         public FilterPreviewService(RestStateStore state) : this(state, FilterPreviewSourceReader.Read) { }
 
-        internal FilterPreviewService(RestStateStore state, Func<string, FilterPreviewSourceFormat> readSourceFormat)
+        internal FilterPreviewService(RestStateStore state, Func<string, FilterPreviewSourceFormat> readSourceFormat,
+            FilterPreviewEngineTiming timing = null)
         {
             this.state = state;
             this.readSourceFormat = readSourceFormat;
-            timer = new Timer(_ => Cleanup(), null, Ttl, Ttl);
+            this.timing = timing ?? FilterPreviewEngineTiming.Default;
+            timer = this.timing.Clock.CreateTimer(_ => Cleanup(), null, Ttl, Ttl);
         }
 
         public async Task<string> CreateAsync(int queueItemId, CancellationToken cancellation)
@@ -123,10 +132,10 @@ namespace Amatsukaze.Server.Rest
             var id = Guid.NewGuid().ToString("N");
             var workDirectory = Path.Combine(dir, id);
             var profile = ServerSupport.DeepCopy(item.Profile);
-            var engine = new FilterPreviewEngine(executable, args);
+            var engine = new FilterPreviewEngine(executable, args, timing);
             try { System.IO.Directory.CreateDirectory(workDirectory); }
             catch { engine.Dispose(); throw; }
-            var session = new Session { OriginalFilterOption = profile.FilterOption, SourceName = item.SrcPath?[(item.SrcPath.LastIndexOfAny(new[] { '/', '\\' }) + 1)..], Id = id, Directory = dir, WorkDirectory = workDirectory, Dat = dat, ModuleDirectory = module, Profile = profile, Setting = setting, Format = format, Engine = engine };
+            var session = new Session(timing.Clock) { OriginalFilterOption = profile.FilterOption, SourceName = item.SrcPath?[(item.SrcPath.LastIndexOfAny(new[] { '/', '\\' }) + 1)..], Id = id, Directory = dir, WorkDirectory = workDirectory, Dat = dat, ModuleDirectory = module, Profile = profile, Setting = setting, Format = format, Engine = engine };
             try
             {
                 await session.Engine.WaitReadyAsync(cancellation).ConfigureAwait(false);
@@ -313,7 +322,7 @@ namespace Amatsukaze.Server.Rest
         public bool Close(string id) { if (!sessions.TryRemove(id, out var session)) return false; session.Dispose(); return true; }
         private void Cleanup()
         {
-            long cutoff = DateTime.UtcNow.Subtract(Ttl).Ticks;
+            long cutoff = timing.Clock.GetUtcNow().Subtract(Ttl).UtcTicks;
             foreach (var item in sessions)
                 if (Interlocked.Read(ref item.Value.LastUsed) < cutoff) Close(item.Key);
         }

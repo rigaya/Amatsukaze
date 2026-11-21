@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Formats.Tar;
 using System.Globalization;
 using System.IO.Compression;
 using System.Security.Cryptography;
@@ -23,7 +24,7 @@ public sealed class ArchiveExtractorTests
 
         var extraction = await fixture.Extractor.ExtractAsync(download, fixture.ExtractDirectory,
             "test", log, CancellationToken.None);
-        var prepared = await new UpdateStaging().PrepareAsync(CreateTarget("^tool$"), extraction,
+        var prepared = await CreateStaging().PrepareAsync(CreateTarget("^tool$"), extraction,
             "1.2.3", log, CancellationToken.None);
 
         Assert.Equal("1.2.3", prepared.Version);
@@ -42,7 +43,7 @@ public sealed class ArchiveExtractorTests
         var extraction = await fixture.Extractor.ExtractAsync(
             fixture.DownloadResult(archive, "deb"), fixture.ExtractDirectory,
             "test", log, CancellationToken.None, target.Payload);
-        var prepared = await new UpdateStaging().PrepareAsync(target, extraction,
+        var prepared = await CreateStaging().PrepareAsync(target, extraction,
             "1.2.3", log, CancellationToken.None);
 
         Assert.Equal("tool", prepared.DestName);
@@ -62,7 +63,7 @@ public sealed class ArchiveExtractorTests
         var extraction = await fixture.Extractor.ExtractAsync(
             fixture.DownloadResult(archive, "7z"), fixture.ExtractDirectory,
             "test", log, CancellationToken.None, target.Payload);
-        var prepared = await new UpdateStaging().PrepareAsync(target, extraction,
+        var prepared = await CreateStaging().PrepareAsync(target, extraction,
             "1.2.3", log, CancellationToken.None);
 
         Assert.Equal("tool.exe", prepared.DestName);
@@ -177,7 +178,7 @@ public sealed class ArchiveExtractorTests
         var extraction = new ExtractionResult(fixture.ExtractDirectory, count, count * Script.Length, 0);
 
         var exception = await Assert.ThrowsAsync<UpdatePreparationException>(() =>
-            new UpdateStaging().PrepareAsync(CreateTarget("(^|/)tool$"), extraction,
+            CreateStaging().PrepareAsync(CreateTarget("(^|/)tool$"), extraction,
                 "1.2.3", log, CancellationToken.None));
         Assert.Equal("EXTRACT_FAILED", exception.Code);
     }
@@ -192,7 +193,7 @@ public sealed class ArchiveExtractorTests
             "#!/bin/sh\necho version 1.2.3\nexit 7\n");
         using var log = new UpdateLog(fixture.Root);
 
-        var prepared = await new UpdateStaging().PrepareAsync(CreateTarget("^tool$"),
+        var prepared = await CreateStaging().PrepareAsync(CreateTarget("^tool$"),
             new ExtractionResult(fixture.ExtractDirectory, 1, Script.Length, 0),
             "1.2.3", log, CancellationToken.None);
         Assert.Equal("1.2.3", prepared.Version);
@@ -251,11 +252,17 @@ public sealed class ArchiveExtractorTests
         var payload = Path.Combine(fixture.ExtractDirectory, "tool");
         await File.WriteAllTextAsync(payload, Script);
         using var log = new UpdateLog(fixture.Root);
-        var preparation = new UpdateStaging().PrepareAsync(CreateTarget("^tool$"),
+        var clock = new FakeTimeProvider();
+        var timers = clock.ObserveTimers();
+        var staging = new UpdateStaging(TimeSpan.FromSeconds(1), clock,
+            (_, _, _) => throw new InvalidOperationException("消失したPayloadを起動した"));
+        var preparation = staging.PrepareAsync(CreateTarget("^tool$"),
             new ExtractionResult(fixture.ExtractDirectory, 1, Script.Length, 0),
             "1.2.3", log, CancellationToken.None);
-        await Task.Delay(100);
+        Assert.True(timers.TryRead(out var grace));
+        Assert.Equal(TimeSpan.FromSeconds(1), grace);
         File.Delete(payload);
+        clock.Advance(grace);
 
         var exception = await Assert.ThrowsAsync<UpdatePreparationException>(() => preparation);
         log.Dispose();
@@ -278,7 +285,7 @@ public sealed class ArchiveExtractorTests
         using var log = new UpdateLog(fixture.Root);
 
         var exception = await Assert.ThrowsAsync<UpdatePreparationException>(() =>
-            new UpdateStaging().PrepareAsync(CreateTarget("^tool$"),
+            CreateStaging().PrepareAsync(CreateTarget("^tool$"),
                 new ExtractionResult(fixture.ExtractDirectory, 1, 17, 0),
                 "1.2.3", log, CancellationToken.None));
         log.Dispose();
@@ -310,6 +317,18 @@ public sealed class ArchiveExtractorTests
         Assert.False(File.Exists(secondPath));
     }
 
+    private static UpdateStaging CreateStaging() =>
+        new(TimeSpan.Zero, TimeProvider.System, OperatingSystem.IsWindows()
+            ? ReadWindowsFixtureVersionAsync : UpdateExecutableProbe.RunWithoutTimeoutAsync);
+
+    private static async Task<UpdateExecutableProbeResult> ReadWindowsFixtureVersionAsync(
+        string path, string argument, CancellationToken cancellationToken)
+    {
+        Assert.Equal("--version", argument);
+        Assert.Equal(Script, await File.ReadAllTextAsync(path, cancellationToken));
+        return new UpdateExecutableProbeResult(0, "version 1.2.3", false);
+    }
+
     private static async Task<string> PrepareDirectAsync(UpdateTransaction transaction,
         string id, string appRoot)
     {
@@ -317,7 +336,7 @@ public sealed class ArchiveExtractorTests
         var path = Path.Combine(directory, "tool");
         await File.WriteAllTextAsync(path, Script);
         using var log = new UpdateLog(appRoot);
-        var prepared = await new UpdateStaging().PrepareAsync(CreateTarget("^tool$", id),
+        var prepared = await CreateStaging().PrepareAsync(CreateTarget("^tool$", id),
             new ExtractionResult(directory, 1, Script.Length, 0), "1.2.3", log,
             CancellationToken.None);
         return prepared.FilePath;
@@ -387,9 +406,10 @@ public sealed class ArchiveExtractorTests
                 File.WriteAllText(path, item.Content);
             }
             var tar = Path.Combine(downloadDirectory, Guid.NewGuid() + ".tar");
-            Run("tar", ["-cf", tar, "-C", source, "."]);
-            Run("xz", [tar]);
-            return tar + ".xz";
+            TarFile.CreateFromDirectory(source, tar, includeBaseDirectory: false);
+            var compressed = tar + ".xz";
+            Run(FindExtractor(), ["a", "-txz", compressed, tar]);
+            return compressed;
         }
 
         public string CreateDeb(params (string Name, string Content)[] entries)

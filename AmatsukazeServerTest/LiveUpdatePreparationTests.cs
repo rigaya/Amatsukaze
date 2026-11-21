@@ -1,3 +1,4 @@
+using System.Net;
 using System.Security.Cryptography;
 using Amatsukaze.Server.Update;
 using Xunit;
@@ -22,7 +23,7 @@ public sealed class LiveUpdatePreparationTests
         using (var log = new UpdateLog(appRoot))
         {
             logPath = log.FilePath;
-            using var releases = new ReleaseClient(string.Empty);
+            using var releases = CreateLiveReleaseClient();
             var candidates = await releases.GetReleasesAsync(target.Repository, target.Id,
                 target.ReleaseSelect, log, CancellationToken.None);
             Assert.NotNull(candidates);
@@ -35,7 +36,7 @@ public sealed class LiveUpdatePreparationTests
             log.Write(target.Id, "S05_SELECT_ASSET", "OK", ("asset", selected.Asset.Name),
                 ("size", selected.Asset.Size), ("digest", selected.Asset.Digest));
             prepared = await new SelfUpdatePreparation(appRoot, string.Empty,
-                UpdateManager.FindExtractor(appRoot)).PrepareAsync(selected.Asset,
+                UpdateManager.FindExtractor(appRoot), UpdateHttpTestSupport.Unbounded).PrepareAsync(selected.Asset,
                 expectedVersion, environment.OS, log, null, CancellationToken.None);
         }
 
@@ -65,23 +66,23 @@ public sealed class LiveUpdatePreparationTests
         using (var log = new UpdateLog(appRoot))
         {
             installLogPath = log.FilePath;
-            await UpdateDiagnostics.LogEnvironmentAsync(log, appRoot);
+            await UpdateDiagnostics.LogEnvironmentAsync(log, appRoot, commandTimeout: Timeout.InfiniteTimeSpan);
             using var transaction = UpdateTransaction.Create(appRoot, log.TransactionId);
-            using var releases = new ReleaseClient(string.Empty);
+            using var releases = CreateLiveReleaseClient();
             // tsreplace は .deb 展開経路を実物で確認するために含めている
             foreach (var target in UpdateCatalog.Targets.Where(target =>
                 target.Id is "x264" or "x265" or "SVT-AV1" or "tsreplace"))
             {
                 var (prepared, expectedVersion) = await PrepareLiveTargetAsync(appRoot,
                     target, transaction, releases, log);
-                var installed = await new UpdateInstaller(appRoot).InstallAsync(target,
+                var installed = await CreateLiveInstaller(appRoot).InstallAsync(target,
                     prepared, expectedVersion, log, CancellationToken.None);
                 // 使い捨てルートには設定が無いため、S12 の判定自体はここでは行わない
                 log.Write(target.Id, "S12_SETTINGS", "SKIP",
                     ("reason", "live_test_no_setting"), ("key", target.SettingKey));
                 log.Write(target.Id, "S13_ROLLBACK", "SKIP",
                     ("reason", "installation_succeeded"));
-                var probe = await UpdateExecutableProbe.RunAsync(installed.DestinationPath,
+                var probe = await UpdateExecutableProbe.RunWithoutTimeoutAsync(installed.DestinationPath,
                     target.VersionArgument, CancellationToken.None);
                 Assert.Matches(target.VersionRegex!, probe.Output);
                 Assert.DoesNotContain(Directory.EnumerateFiles(
@@ -107,7 +108,7 @@ public sealed class LiveUpdatePreparationTests
                 UnixFileMode.UserExecute);
             var prepared = new PreparedUpdate("x264", staged, "x264", "999999");
             var exception = await Assert.ThrowsAsync<UpdateInstallException>(() =>
-                new UpdateInstaller(appRoot).InstallAsync(rollbackTarget, prepared,
+                CreateLiveInstaller(appRoot).InstallAsync(rollbackTarget, prepared,
                     "999999", rollbackLog, CancellationToken.None));
             Assert.Equal("VERIFY_FAILED", exception.Code);
         }
@@ -155,10 +156,10 @@ public sealed class LiveUpdatePreparationTests
         using (var log = new UpdateLog(appRoot))
         {
             logPath = log.FilePath;
-            await UpdateDiagnostics.LogEnvironmentAsync(log, appRoot);
+            await UpdateDiagnostics.LogEnvironmentAsync(log, appRoot, commandTimeout: Timeout.InfiniteTimeSpan);
             using var transaction = UpdateTransaction.Create(appRoot, log.TransactionId);
-            using var releases = new ReleaseClient(string.Empty);
-            using var downloader = new UpdateDownloader(string.Empty);
+            using var releases = CreateLiveReleaseClient();
+            using var downloader = CreateLiveDownloader();
             var environment = UpdateRuntimeEnvironment.Detect();
             foreach (var target in UpdateCatalog.Targets.Where(target =>
                 target.Id is "x264" or "x265" or "SVT-AV1"))
@@ -199,7 +200,7 @@ public sealed class LiveUpdatePreparationTests
                 var extraction = await new ArchiveExtractor(UpdateManager.FindExtractor(appRoot))
                     .ExtractAsync(download, transaction.GetTargetExtractDirectory(target.Id),
                         target.Id, log, CancellationToken.None, target.Payload);
-                var prepared = await new UpdateStaging().PrepareAsync(target, extraction,
+                var prepared = await CreateLiveStaging().PrepareAsync(target, extraction,
                     expectedVersion, log, CancellationToken.None);
                 Assert.StartsWith(transaction.RootDir, prepared.FilePath, StringComparison.Ordinal);
             }
@@ -261,17 +262,30 @@ public sealed class LiveUpdatePreparationTests
             ("version", expectedVersion), ("scanned", scanned));
         log.Write(target.Id, "S05_SELECT_ASSET", "OK", ("asset", selectedAsset.Name),
             ("size", selectedAsset.Size), ("digest", selectedAsset.Digest));
-        using var downloader = new UpdateDownloader(string.Empty);
+        using var downloader = CreateLiveDownloader();
         var download = await downloader.DownloadAsync(selectedAsset,
             transaction.GetTargetDownloadDirectory(target.Id), target.Id, log, null,
             CancellationToken.None);
         var extraction = await new ArchiveExtractor(UpdateManager.FindExtractor(appRoot))
             .ExtractAsync(download, transaction.GetTargetExtractDirectory(target.Id),
                 target.Id, log, CancellationToken.None, target.Payload);
-        var prepared = await new UpdateStaging().PrepareAsync(target, extraction,
+        var prepared = await CreateLiveStaging().PrepareAsync(target, extraction,
             expectedVersion!, log, CancellationToken.None);
         return (prepared, expectedVersion!);
     }
+
+    private static ReleaseClient CreateLiveReleaseClient() =>
+        new(UpdateHttpClientFactory.Create(string.Empty, githubApi: true), apiBaseUrl: null,
+            UpdateHttpTestSupport.Unbounded, Dns.GetHostAddressesAsync, UpdateHttpTestSupport.UnboundedNetworkProbes);
+
+    private static UpdateDownloader CreateLiveDownloader() =>
+        new(UpdateHttpClientFactory.Create(string.Empty), ownsClient: true, timing: UpdateHttpTestSupport.Unbounded);
+
+    private static UpdateStaging CreateLiveStaging() =>
+        new(TimeSpan.Zero, TimeProvider.System, UpdateExecutableProbe.RunWithoutTimeoutAsync);
+
+    private static UpdateInstaller CreateLiveInstaller(string appRoot) =>
+        new(appRoot, probeExecutable: UpdateExecutableProbe.RunWithoutTimeoutAsync);
 
     private static string HashFile(string path)
     {
