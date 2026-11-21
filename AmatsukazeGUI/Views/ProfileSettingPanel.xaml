@@ -642,7 +642,7 @@
                                   IsEnabled="{Binding IsChecked, ElementName=nicoJKCheck}"/>
                     </Grid>
                     <StackPanel Orientation="Horizontal" Margin="0,3" IsEnabled="{Binding IsChecked, ElementName=nicoJKCheck}">
-                        <TextBlock Text="アニメの別の局のコメント" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <TextBlock Text="アニメの別放送のコメント" VerticalAlignment="Center" Margin="0,0,6,0"/>
                         <ComboBox ToolTip="アニメの録画について、しょぼいカレンダーで同じ回を放送した別の局を調べ、その局の実況コメントを使います。別の局の録画が見つかれば音声で、なければコメントの内容で時刻を合わせます。" SelectedIndex="{Binding Model.SelectedProfile.NicoJKReferenceMode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
                             <ComboBoxItem Content="使用しない"/>
                             <ComboBoxItem Content="置き換える"/>

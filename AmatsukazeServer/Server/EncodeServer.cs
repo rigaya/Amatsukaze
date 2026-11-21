@@ -2071,7 +2071,7 @@ namespace Amatsukaze.Server
             }
         }
 
-        // アニメ(ARIBのジャンル大分類7)で、プロファイルが先行放送のコメントを使う設定のときの--nicojk-altの値
+        // アニメ(ARIBのジャンル大分類7)で、プロファイルが別放送のコメントを使う設定のときの--nicojk-altの値
         internal static string GetNicoJKAltMode(ProfileSetting profile, IEnumerable<GenreItem> genre)
         {
             if (!profile.EnableNicoJK || profile.NicoJKReferenceMode is not (1 or 2)) return null;
@@ -2080,8 +2080,8 @@ namespace Amatsukaze.Server
         }
 
         // 実況の変換ツールの引数。WindowsでNicoConvASSを設定していればNicoConvASSを使う。
-        // 先行放送のコメントはnicojk_assだけが対応するので、使う設定ならNicoConvASSのときもnicojk_assを渡す
-        // (CLIは、通常の取得をNicoConvASSで行い、先行放送のコメントにnicojk_assを使う。手動の指定の有無はCLIが見る)。
+        // 別放送のコメントはnicojk_assだけが対応するので、使う設定ならNicoConvASSのときもnicojk_assを渡す
+        // (CLIは、通常の取得をNicoConvASSで行い、別放送のコメントにnicojk_assを使う。手動の指定の有無はCLIが見る)。
         internal static string GetNicoJKToolArguments(bool isWindows, string nicoConvAssPath, string nicoJKAssPath, string nicoJKAlt)
         {
             var useNicoConvAss = isWindows && !string.IsNullOrEmpty(nicoConvAssPath);

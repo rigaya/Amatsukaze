@@ -71,7 +71,7 @@ public class NicoJKProgramStartTests
     [Theory]
     [InlineData("replace")]
     [InlineData("merge")]
-    public void 先行放送のコメントの指定をnicojk_assへ渡す(string mode)
+    public void 別放送のコメントの指定をnicojk_assへ渡す(string mode)
     {
         var arguments = MakeNicoJKArguments(MakeNicoJKProfile(true), mode);
         Assert.Contains(" --nicojk-alt " + mode, arguments);
@@ -86,12 +86,12 @@ public class NicoJKProgramStartTests
     [InlineData(true, "", "nicojk_ass.exe", "replace", " --nicojk-alt replace --nicojkass \"nicojk_ass.exe\"")]
     // Windows: NicoConvASSがあれば通常はNicoConvASSだけ
     [InlineData(true, "NicoConvASS.exe", "nicojk_ass.exe", null, " --nicoass \"NicoConvASS.exe\"")]
-    // Windows: 先行放送のコメントを使うなら、NicoConvASSとnicojk_assの両方を渡す
+    // Windows: 別放送のコメントを使うなら、NicoConvASSとnicojk_assの両方を渡す
     [InlineData(true, "NicoConvASS.exe", "nicojk_ass.exe", "merge",
         " --nicojk-alt merge --nicoass \"NicoConvASS.exe\" --nicojkass \"nicojk_ass.exe\"")]
-    // Windows: nicojk_assのパスがなければ先行放送のコメントは使わない
+    // Windows: nicojk_assのパスがなければ別放送のコメントは使わない
     [InlineData(true, "NicoConvASS.exe", "", "merge", " --nicoass \"NicoConvASS.exe\"")]
-    public void 先行放送のコメントはNicoConvASSの構成でもnicojk_assで使う(
+    public void 別放送のコメントはNicoConvASSの構成でもnicojk_assで使う(
         bool isWindows, string nicoConvAssPath, string nicoJKAssPath, string nicoJKAlt, string expected)
     {
         Assert.Equal(expected, EncodeServer.GetNicoJKToolArguments(isWindows, nicoConvAssPath, nicoJKAssPath, nicoJKAlt));
@@ -103,7 +103,7 @@ public class NicoJKProgramStartTests
     [InlineData(2, 7, true, "merge")]
     [InlineData(2, 7, false, null)]
     [InlineData(2, 6, true, null)]
-    public void アニメで先行放送のコメントを使う設定のときだけモードを決める(int referenceMode, int level1, bool enable, string expected)
+    public void アニメで別放送のコメントを使う設定のときだけモードを決める(int referenceMode, int level1, bool enable, string expected)
     {
         var profile = new ProfileSetting { EnableNicoJK = enable, NicoJKReferenceMode = referenceMode };
         var genre = new List<GenreItem> { new GenreItem { Space = (int)GenreSpace.ARIB, Level1 = level1 } };
@@ -111,7 +111,7 @@ public class NicoJKProgramStartTests
     }
 
     [Fact]
-    public void ジャンルがないときは先行放送のコメントを使わない()
+    public void ジャンルがないときは別放送のコメントを使わない()
     {
         var profile = new ProfileSetting { EnableNicoJK = true, NicoJKReferenceMode = 1 };
         Assert.Null(EncodeServer.GetNicoJKAltMode(profile, null));

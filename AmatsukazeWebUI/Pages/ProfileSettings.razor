@@ -812,7 +812,7 @@ else
                 </td>
             </tr>
             <tr>
-                <th>アニメの別の局のコメント</th>
+                <th>アニメの別放送のコメント</th>
                 <td>
                     <select title="アニメの録画について、しょぼいカレンダーで同じ回を放送した別の局を調べ、その局の実況コメントを使います。別の局の録画が見つかれば音声で、なければコメントの内容で時刻を合わせます。" @onchange="@(e => OnIntChanged(e, "NicoJKReferenceMode"))" disabled="@(!GetBoolValue("EnableNicoJK"))">
                         <option value="0" selected="@(GetIntValue("NicoJKReferenceMode") == 0)">使用しない</option>

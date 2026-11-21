@@ -1149,7 +1149,7 @@ namespace Amatsukaze.Server
             keyValueBool("自動ビットレート指定", profile.AutoBuffer);
             keyValue("自動ビットレート係数", string.Format("{0}:{1}:{2}", profile.Bitrate.A, profile.Bitrate.B, profile.Bitrate.H264));
             keyValueBool("ニコニコ実況コメントを有効にする", profile.EnableNicoJK);
-            keyValue("アニメの別の局のコメント", profile.NicoJKReferenceMode switch
+            keyValue("アニメの別放送のコメント", profile.NicoJKReferenceMode switch
             {
                 1 => "置き換える",
                 2 => "統合する",
