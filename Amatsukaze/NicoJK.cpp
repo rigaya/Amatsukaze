@@ -428,7 +428,14 @@ bool NicoJK::makeASS_(int serviceId, time_t startTime, int duration) {
             if (manual && setting_.isUseNicoJKLog()) ctx.info(_T("取得元の指定をnicojklogより優先します"));
             // 基準の録画を使うときだけ、対象の音声を渡す
             const bool useReference = !source_.ref.empty() || !altMode_.empty();
-            if (!useReference || prepareTargetAudio()) {
+            // デバッグ用: 先行放送の録画があっても、対象の音声を渡さずコメントでの照合だけにする
+            const char* commentAlignDebug = std::getenv("AMATSUKAZE_NICOJK_COMMENT_ALIGN_DEBUG");
+            const bool commentAlignOnly = !altMode_.empty() && commentAlignDebug && std::string(commentAlignDebug) == "1";
+            if (commentAlignOnly) {
+                ctx.info(_T("AMATSUKAZE_NICOJK_COMMENT_ALIGN_DEBUG=1のため、音声を使わずコメントで時刻を合わせます"));
+                targetWavPath_.clear();
+            }
+            if (!useReference || commentAlignOnly || prepareTargetAudio()) {
                 // 先行放送のコメントでは、対象の局にjk番号がなくても基準があればコメントを付けられる
                 // (局の表が読めなくても、nicojk_assが自分の表で判断するので続ける)
                 if (!altMode_.empty()) {
