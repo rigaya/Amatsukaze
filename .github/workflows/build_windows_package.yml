@@ -28,7 +28,7 @@ jobs:
       BASE_PKG_URL: https://github.com/rigaya/Amatsukaze/releases/download/1.0.9.0/AmatsukazeBasePkg_20260902.7z
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           submodules: true
           fetch-depth: 0
@@ -61,7 +61,7 @@ jobs:
           del roots.sst
 
       - name: Cache vcpkg
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             vcpkg
@@ -145,7 +145,7 @@ jobs:
       # runnerには新しい版のSDK(11など)も入っていて、何もしないとそちらが使われる。
       # SDK 10を入れ、global.jsonで10.0の最新の機能帯に固定する(WebUIはnet10.0)。
       - name: Set up .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
 
@@ -305,13 +305,13 @@ jobs:
         id: pack
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Amatsukaze_${{ steps.version.outputs.version_name }}
           path: ${{ steps.pack.outputs.pkg_name }}
 
       - name: Upload Release Asset
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3
         if: startsWith(github.ref, 'refs/tags/')
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

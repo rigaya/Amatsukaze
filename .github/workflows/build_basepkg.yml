@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           submodules: true
           fetch-depth: 0
@@ -90,7 +90,7 @@ jobs:
           done
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Amatsukaze_Linux_BasePkg_${{ steps.version.outputs.value }}_x64
           path: artifacts/basepkg/Amatsukaze_Linux_BasePkg_${{ steps.version.outputs.value }}_x64.tar.xz

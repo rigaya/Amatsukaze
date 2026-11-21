@@ -26,7 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Download existing artifacts
         env:
@@ -75,7 +75,7 @@ jobs:
           tar -C pkg -cJf "Amatsukaze_linux_trial_${GITHUB_RUN_ID}_x64.tar.xz" .
 
       - name: Upload trial archive
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Amatsukaze_linux_trial_${{ github.run_id }}_x64
           path: Amatsukaze_linux_trial_${{ github.run_id }}_x64.tar.xz

@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           submodules: true
           fetch-depth: 0
@@ -66,12 +66,12 @@ jobs:
       AMT_NATIVE_TEST_RUNTIME_DIR: ${{ github.workspace }}\native-test-runtime\exe_files
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           submodules: true
           fetch-depth: 0
       - name: Cache vcpkg
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             vcpkg
@@ -125,11 +125,11 @@ jobs:
       SEVENZIP_ARCHIVE_SHA256: 41aaba7b1235304ab5aa0624530c67ae829496cd29e875925271efdccc28c03e
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Set up .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
       - name: Set up release 7-Zip

@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           submodules: true
           fetch-depth: 0
@@ -65,7 +65,7 @@ jobs:
           tar -cf native.tar -C buildAmatsukaze/Amatsukaze .
 
       - name: Upload native tree
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: amatsukaze-native
           path: native.tar
@@ -76,7 +76,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           submodules: true
           fetch-depth: 0
@@ -106,7 +106,7 @@ jobs:
           tar -cf dotnet.tar -C buildAmatsukaze/Amatsukaze .
 
       - name: Upload .NET tree
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: amatsukaze-dotnet
           path: dotnet.tar
@@ -120,7 +120,7 @@ jobs:
       contents: write
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -136,13 +136,13 @@ jobs:
           echo "version_name=${VERSION}" >> $GITHUB_OUTPUT
 
       - name: Download native tree
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: amatsukaze-native
           path: parts
 
       - name: Download .NET tree
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: amatsukaze-dotnet
           path: parts
@@ -197,13 +197,13 @@ jobs:
           7z h -scrc* ${{ steps.create_pkg.outputs.pkg_name }}
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Amatsukaze_linux_${{ steps.rev.outputs.version_name }}
           path: ${{ steps.create_pkg.outputs.pkg_name }}
 
       - name: Upload Release Asset
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3
         if: startsWith(github.ref, 'refs/tags/')
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -216,13 +216,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           submodules: true
           fetch-depth: 0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Show Docker info
         run: |
