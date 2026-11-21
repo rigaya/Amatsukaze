@@ -86,7 +86,7 @@ jobs:
         run: |
           if not exist vcpkg git clone https://github.com/microsoft/vcpkg vcpkg
           call vcpkg\bootstrap-vcpkg.bat
-          vcpkg\vcpkg install zlib:x64-windows-static libjpeg-turbo:x64-windows-static
+          vcpkg\vcpkg install zlib:x64-windows-static libjpeg-turbo[turbojpeg]:x64-windows-static
           if not exist deps mkdir deps
           curl.exe -fL --retry 3 --retry-delay 10 -o deps\ffmpeg.7z "%FFMPEG_URL%"
           curl.exe -fL --retry 3 --retry-delay 10 -o deps\deplib.7z "%DEPLIB_URL%"
