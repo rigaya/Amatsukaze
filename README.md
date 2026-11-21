@@ -591,7 +591,7 @@ AddTaskの終了コードは、`0`がタスク追加成功 (エンコード完�
 
 <img src="./data/nicojk_alt_audio.png" width="800">
 
-録画が見つからなければ、コメントの内容で時刻を合わせます。
+録画が見つからなければ、コメントの内容で時刻を合わせます。CMの位置が違ってもある程度合いますが、やや精度が落ちます。
 
 <img src="./data/nicojk_alt_comment.png" width="800">
 
