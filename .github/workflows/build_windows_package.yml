@@ -142,9 +142,19 @@ jobs:
           echo --- deps contents (after Extract) ---
           tree /f deps
 
+      # runnerには新しい版のSDK(11など)も入っていて、何もしないとそちらが使われる。
+      # SDK 10を入れ、global.jsonで10.0の最新の機能帯に固定する(WebUIはnet10.0)。
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
       - name: Install .NET WebAssembly build tools
         shell: cmd
         run: |
+          cd /d %GITHUB_WORKSPACE%
+          echo {"sdk":{"version":"10.0.100","rollForward":"latestFeature"}}> global.json
+          dotnet --version
           dotnet workload install wasm-tools --skip-manifest-update
 
       - name: Build (publish.bat)
