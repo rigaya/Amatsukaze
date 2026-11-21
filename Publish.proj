@@ -151,11 +151,21 @@
              Properties="$(NativeRelease2NoRefProps)" />
   </Target>
 
-  <Target Name="PublishDotNet">
+  <!--
+    .NET の restore。PublishDotNet が別の MSBuild のプロセスで呼ぶ。
+    同じビルドの中で restore すると、restore で増えた import(NuGet から入る Microsoft.NET.Sdk.WebAssembly.Pack など)が
+    あとのビルドに反映されない。obj が無いと、WebUI の publish が MSB4057 (ResolveWasmOutputs) で失敗する。
+  -->
+  <Target Name="RestoreDotNet">
     <Message Importance="high" Text="dotnet: restore $([System.DateTime]::Now.ToString('HH:mm:ss'))" />
     <!-- アプリ同士は同じプロパティで restore し、WebUI とは段を分ける。project.assets.json の同時書き込みを避ける。 -->
     <MSBuild Projects="@(DotNetApp)" Targets="Restore" BuildInParallel="true" Properties="$(DotNetAppBuildProps)" />
     <MSBuild Projects="@(DotNetWebUi)" Targets="Restore" Properties="$(DotNetWebBuildProps)" />
+  </Target>
+
+  <Target Name="PublishDotNet">
+    <!-- ネイティブと並列のまま、restore だけ別のプロセスにする(/restore だとネイティブの開始が restore の分遅れる)。 -->
+    <Exec Command="&quot;$(MSBuildBinPath)\MSBuild.exe&quot; &quot;$(MSBuildThisFileFullPath)&quot; /t:RestoreDotNet /m /nr:false /nologo /v:m" />
     <Message Importance="high" Text="dotnet: build shared references $([System.DateTime]::Now.ToString('HH:mm:ss'))" />
     <!-- GUI が ServerWin / Server / Shared を引き連れる。WebUI も Shared を同じ obj へ出すので、同時にはビルドしない。 -->
     <MSBuild Projects="$(RepoRoot)AmatsukazeGUI\AmatsukazeGUI.csproj" Targets="Build" Properties="$(DotNetAppBuildProps)" />
