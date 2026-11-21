@@ -539,16 +539,13 @@ AddTaskの終了コードは、`0`がタスク追加成功 (エンコード完�
 
 ### ニコニコ実況
 
+nicojk_assかNicoConvAssのどちらかを使用します。
+
 - Windows/Linux環境 (nicojk_ass)
 
-  同梱のnicojk_ass(`exe_files/nicojk_ass`。Windowsは`nicojk_ass.exe`。[danmaku2ass](https://github.com/m13253/danmaku2ass)を内蔵)を使用してass字幕変換を行えます。Linuxでは変換ツールとしてnicojk_assのみを選択できます。WindowsではNicoConvAssのパスが設定されている場合はNicoConvAssを優先し、設定されていない場合はnicojk_assを使用します(「アニメの別の局のコメント」を使う録画は、NicoConvAssを設定していてもnicojk_assを使用します)。
+  同梱の[nicojk_ass](https://github.com/rigaya/nicojk_ass)を使用してass字幕変換を行います。なお、WindowsではNicoConvAssのパスが設定されている場合はNicoConvAssを優先します。
 
-  nicojk_assは単体で動く実行ファイルで、Pythonは不要です。配布アーカイブの`exe_files/`に、[nicojk_assのリリース](https://github.com/rigaya/nicojk_ass/releases)の単一の実行ファイルを同梱しています(配布アーカイブを作るCIが、決めた版をリリースから取り込みます)。ライセンス(実行ファイルはGPL-3)は、[nicojk_assのリポジトリ](https://github.com/rigaya/nicojk_ass)とリリースのzipを参照してください。
-
-  開発用に、nicojk_assのソースをそのまま動かすこともできます。基本設定のnicojk_assのパス(または`--nicojkass`)に、ソースの`nicojk_ass.py`を指定してください(この場合はPython 3が必要です)。Linuxの手元のビルド(`scripts/build.sh`)は、隣のnicojk_assのリポジトリで作ったexe(`dist/nicojk_ass`。環境変数`NICOJK_ASS_EXE`で変えられます)があればコピーします。
-
-  nicojk_assでは、ニコニコ実況の過去ログAPIからデータを取得し、danmaku2assでassに変換後、生成されたassをNicoConvAssにある程度寄せる処理を行っています。
-  NicoConvAssの出力と完全互換ではないほか、細かい調整を行うことはできません。
+  nicojk_assの出力はNicoConvAssの出力と完全互換ではないほか、細かい調整を行うことはできません。
 
   - 設定方法
   
