@@ -421,7 +421,7 @@ bool NicoJK::makeASS_(int serviceId, time_t startTime, int duration) {
             if (canRunScript()) {
                 altMode_ = source_.alt;
             } else {
-                ctx.warn(_T("nicojk_assまたはPython 3が見つからないため、先行放送のコメントを使わず通常の実況取得に戻ります"));
+                ctx.warn(_T("nicojk_assまたはPython 3が見つからないため、別の局のコメントを使わず通常の実況取得に戻ります"));
             }
         }
         if (manual || !altMode_.empty()) {

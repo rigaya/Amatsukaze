@@ -150,7 +150,7 @@ static void printHelp(const tchar* bin) {
         "  --nicojk-ref <パス> 基準録画の音声に照合して実況を付ける\n"
         "  --nicojk-ref-sid <ID> 基準録画のサービスID\n"
         "  --nicojk-ref-mode replace|merge 基準のみ/対象の実況と統合[merge]\n"
-        "  --nicojk-alt replace|merge 先行放送のコメントを探して使う(アニメなど。\n"
+        "  --nicojk-alt replace|merge 同じ回の別の局のコメントを探して使う(アニメなど。\n"
         "                      取得元の指定があればそちらを優先)\n"
         "  --nicojk-dump-dir <フォルダ> 実況の調査用に、対象の音声・本編の区間・\n"
         "                      nicojk_assのレポートなどを残す\n"

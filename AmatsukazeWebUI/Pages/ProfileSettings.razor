@@ -812,9 +812,9 @@ else
                 </td>
             </tr>
             <tr>
-                <th>アニメの先行放送のコメント</th>
+                <th>アニメの別の局のコメント</th>
                 <td>
-                    <select title="アニメの録画について、しょぼいカレンダーで同じ回の先行放送(または同時刻の別局の放送)を調べます。入力TSと同じフォルダにその録画があれば、音声で位置を合わせて、その放送の実況コメントを使います。" @onchange="@(e => OnIntChanged(e, "NicoJKReferenceMode"))" disabled="@(!GetBoolValue("EnableNicoJK"))">
+                    <select title="アニメの録画について、しょぼいカレンダーで同じ回を放送した別の局を調べ、その局の実況コメントを使います。別の局の録画が見つかれば音声で、なければコメントの内容で時刻を合わせます。" @onchange="@(e => OnIntChanged(e, "NicoJKReferenceMode"))" disabled="@(!GetBoolValue("EnableNicoJK"))">
                         <option value="0" selected="@(GetIntValue("NicoJKReferenceMode") == 0)">使用しない</option>
                         <option value="1" selected="@(GetIntValue("NicoJKReferenceMode") == 1)">置き換える</option>
                         <option value="2" selected="@(GetIntValue("NicoJKReferenceMode") == 2)">統合する</option>

@@ -40,7 +40,7 @@ public sealed class NicoJKReferenceProfileTests
         var restored = ServerSupport.NormalizeProfile(Assert.IsType<ProfileSetting>(serializer.ReadObject(stream)));
         Assert.Equal(mode, restored.NicoJKReferenceMode);
         var description = restored.ToLongString();
-        Assert.Contains("アニメの先行放送のコメント", description);
+        Assert.Contains("アニメの別の局のコメント", description);
         Assert.Contains(label, description);
     }
 
