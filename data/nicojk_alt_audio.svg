@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="266" viewBox="0 0 1000 266" font-family="'Noto Sans CJK JP','Yu Gothic','Meiryo',sans-serif">
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#3AAE8C"/></marker></defs>
+<rect x="20" y="20" width="150" height="148" rx="8" fill="#E8F8F2" stroke="#8FD6BF" stroke-width="1.5"/>
+<text x="95.0" y="90.0" text-anchor="middle" font-size="15" font-weight="bold" fill="#1F4D40">対象の録画</text>
+<text x="95.0" y="110.0" text-anchor="middle" font-size="12.5" fill="#4F7D70">エンコードするTS</text>
+<rect x="204" y="108" width="190" height="60" rx="8" fill="#E8F8F2" stroke="#8FD6BF" stroke-width="1.5"/>
+<text x="299.0" y="125.0" text-anchor="middle" font-size="15" font-weight="bold" fill="#1F4D40">放送を特定</text>
+<text x="299.0" y="145.0" text-anchor="middle" font-size="12.5" fill="#4F7D70">しょぼいカレンダー</text>
+<text x="299.0" y="163.0" text-anchor="middle" font-size="12.5" fill="#4F7D70">同じ回の別の局</text>
+<rect x="430" y="20" width="190" height="56" rx="8" fill="#E8F8F2" stroke="#8FD6BF" stroke-width="1.5"/>
+<text x="525.0" y="44.0" text-anchor="middle" font-size="15" font-weight="bold" fill="#1F4D40">対象の局のコメント</text>
+<text x="525.0" y="64.0" text-anchor="middle" font-size="12.5" fill="#4F7D70">過去ログ</text>
+<rect x="840" y="20" width="140" height="148" rx="8" fill="#C9F0E2" stroke="#8FD6BF" stroke-width="1.5"/>
+<text x="910.0" y="81.0" text-anchor="middle" font-size="15" font-weight="bold" fill="#1F4D40">統合 / 差し替え</text>
+<text x="910.0" y="101.0" text-anchor="middle" font-size="12.5" fill="#4F7D70">混ぜる</text>
+<text x="910.0" y="119.0" text-anchor="middle" font-size="12.5" fill="#4F7D70">または置き換える</text>
+<rect x="840" y="192" width="140" height="54" rx="8" fill="#E8F8F2" stroke="#8FD6BF" stroke-width="1.5"/>
+<text x="910.0" y="215.0" text-anchor="middle" font-size="15" font-weight="bold" fill="#1F4D40">出力</text>
+<text x="910.0" y="235.0" text-anchor="middle" font-size="12.5" fill="#4F7D70">ASS字幕</text>
+<polyline points="170,48.0 430,48.0" fill="none" stroke="#3AAE8C" stroke-width="2" marker-end="url(#a)"/>
+<polyline points="170,138.0 204,138.0" fill="none" stroke="#3AAE8C" stroke-width="2" marker-end="url(#a)"/>
+<polyline points="394,138.0 430,138.0" fill="none" stroke="#3AAE8C" stroke-width="2" marker-end="url(#a)"/>
+<polyline points="910.0,168 910.0,192" fill="none" stroke="#3AAE8C" stroke-width="2" marker-end="url(#a)"/>
+<rect x="204" y="186" width="190" height="60" rx="8" fill="#E8F8F2" stroke="#8FD6BF" stroke-width="1.5"/>
+<text x="299.0" y="212.0" text-anchor="middle" font-size="15" font-weight="bold" fill="#1F4D40">録画を探す</text>
+<text x="299.0" y="232.0" text-anchor="middle" font-size="12.5" fill="#4F7D70">録画フォルダ</text>
+<rect x="430" y="108" width="190" height="60" rx="8" fill="#E8F8F2" stroke="#8FD6BF" stroke-width="1.5"/>
+<text x="525.0" y="134.0" text-anchor="middle" font-size="15" font-weight="bold" fill="#1F4D40">別の局のコメント</text>
+<text x="525.0" y="154.0" text-anchor="middle" font-size="12.5" fill="#4F7D70">過去ログ</text>
+<rect x="430" y="186" width="190" height="60" rx="8" fill="#E8F8F2" stroke="#8FD6BF" stroke-width="1.5"/>
+<text x="525.0" y="212.0" text-anchor="middle" font-size="15" font-weight="bold" fill="#1F4D40">別の局の録画</text>
+<text x="525.0" y="232.0" text-anchor="middle" font-size="12.5" fill="#4F7D70">音声を取り出す</text>
+<rect x="650" y="108" width="160" height="138" rx="8" fill="#C9F0E2" stroke="#8FD6BF" stroke-width="1.5"/>
+<text x="730.0" y="164.0" text-anchor="middle" font-size="15" font-weight="bold" fill="#1F4D40">音声の照合</text>
+<text x="730.0" y="184.0" text-anchor="middle" font-size="12.5" fill="#4F7D70">区間ごとのずれで</text>
+<text x="730.0" y="202.0" text-anchor="middle" font-size="12.5" fill="#4F7D70">時刻を合わせる</text>
+<polyline points="299.0,168 299.0,186" fill="none" stroke="#3AAE8C" stroke-width="2" marker-end="url(#a)"/>
+<polyline points="394,216.0 430,216.0" fill="none" stroke="#3AAE8C" stroke-width="2" marker-end="url(#a)"/>
+<polyline points="620,138.0 650,138.0" fill="none" stroke="#3AAE8C" stroke-width="2" marker-end="url(#a)"/>
+<polyline points="620,216.0 650,216.0" fill="none" stroke="#3AAE8C" stroke-width="2" marker-end="url(#a)"/>
+<polyline points="620,48.0 840,48.0" fill="none" stroke="#3AAE8C" stroke-width="2" marker-end="url(#a)"/>
+<polyline points="810,150 840,150" fill="none" stroke="#3AAE8C" stroke-width="2" marker-end="url(#a)"/>
+</svg>
