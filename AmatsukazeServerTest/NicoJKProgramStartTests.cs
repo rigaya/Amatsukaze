@@ -74,13 +74,27 @@ public class NicoJKProgramStartTests
     public void 先行放送のコメントの指定をnicojk_assへ渡す(string mode)
     {
         var arguments = MakeNicoJKArguments(MakeNicoJKProfile(true), mode);
-        if (!arguments.Contains(" --nicojkass "))
-        {
-            // NicoConvASSを使う構成(Windows)では、先行放送のコメントは使えないので渡さない
-            Assert.DoesNotContain("--nicojk-alt", arguments);
-            return;
-        }
         Assert.Contains(" --nicojk-alt " + mode, arguments);
+        Assert.Contains(" --nicojkass ", arguments);
+    }
+
+    [Theory]
+    // Linux: NicoConvASSのパスがあってもnicojk_assだけ
+    [InlineData(false, "NicoConvASS.exe", "nicojk_ass", null, " --nicojkass \"nicojk_ass\"")]
+    [InlineData(false, "NicoConvASS.exe", "nicojk_ass", "merge", " --nicojk-alt merge --nicojkass \"nicojk_ass\"")]
+    // Windows: NicoConvASSがなければnicojk_ass
+    [InlineData(true, "", "nicojk_ass.exe", "replace", " --nicojk-alt replace --nicojkass \"nicojk_ass.exe\"")]
+    // Windows: NicoConvASSがあれば通常はNicoConvASSだけ
+    [InlineData(true, "NicoConvASS.exe", "nicojk_ass.exe", null, " --nicoass \"NicoConvASS.exe\"")]
+    // Windows: 先行放送のコメントを使うなら、NicoConvASSとnicojk_assの両方を渡す
+    [InlineData(true, "NicoConvASS.exe", "nicojk_ass.exe", "merge",
+        " --nicojk-alt merge --nicoass \"NicoConvASS.exe\" --nicojkass \"nicojk_ass.exe\"")]
+    // Windows: nicojk_assのパスがなければ先行放送のコメントは使わない
+    [InlineData(true, "NicoConvASS.exe", "", "merge", " --nicoass \"NicoConvASS.exe\"")]
+    public void 先行放送のコメントはNicoConvASSの構成でもnicojk_assで使う(
+        bool isWindows, string nicoConvAssPath, string nicoJKAssPath, string nicoJKAlt, string expected)
+    {
+        Assert.Equal(expected, EncodeServer.GetNicoJKToolArguments(isWindows, nicoConvAssPath, nicoJKAssPath, nicoJKAlt));
     }
 
     [Theory]

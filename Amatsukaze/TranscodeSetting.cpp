@@ -1098,6 +1098,11 @@ bool ConfigWrapper::isNicoJKAssEnabled() const {
     return !conf.nicoJKAssPath.empty();
 }
 
+// 通常の実況取得にNicoConvASSを使うか(--nicoassを明示したときだけ)
+bool ConfigWrapper::isNicoConvAssPreferred() const {
+    return conf.nicoConvAssSpecified && !conf.nicoConvAssPath.empty();
+}
+
 tstring ConfigWrapper::getNicoConvChSidPath() const {
     return conf.nicoConvChSidPath;
 }

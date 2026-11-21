@@ -460,7 +460,8 @@ bool NicoJK::makeASS_(int serviceId, time_t startTime, int duration) {
         ctx.errorF(_T("実況コメントの生成に失敗: %s"), e.message());
         return false;
     }
-    if (setting_.isNicoJKAssEnabled()) {
+    // NicoConvASSも指定されていれば、通常の取得はNicoConvASSで行う(nicojk_assは先行放送のコメントと手動の取得元だけ)
+    if (setting_.isNicoJKAssEnabled() && !setting_.isNicoConvAssPreferred()) {
         getJKNum(serviceId);
         // 先行放送のコメントを使わないなら、対象の局にjk番号がないときはnicojk_assを呼ばず終わる
         if (jknum_ == -1) return false;

@@ -263,6 +263,8 @@ struct Config {
     // 字幕生成モード
     SUBTITLE_MODE subtitleMode;
     tstring nicoConvAssPath;
+    // --nicoassでNicoConvASSを明示した(Windows)。--nicojkassもあれば、nicojk_assは先行放送のコメントと手動の取得元にだけ使う
+    bool nicoConvAssSpecified = false;
     tstring nicoJKAssPath;
     NicoJKSourceSpec nicoJKSource;
     tstring nicoConvChSidPath;
@@ -444,6 +446,7 @@ public:
     const NicoJKSourceSpec& getNicoJKSource() const { return conf.nicoJKSource; }
 
     bool isNicoJKAssEnabled() const;
+    bool isNicoConvAssPreferred() const;
 
     tstring getNicoConvChSidPath() const;
 

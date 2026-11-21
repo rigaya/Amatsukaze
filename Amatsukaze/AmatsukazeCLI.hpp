@@ -629,6 +629,7 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
         } else if (key == _T("--nicoass")) {
 #if defined(_WIN32) || defined(_WIN64)
             conf.nicoConvAssPath = pathNormalize(getParam(argc, argv, i++));
+            conf.nicoConvAssSpecified = true;
 #else
             // Linux では旧オプションも nicojk_ass の指定として扱う
             conf.nicoJKAssPath = pathNormalize(getParam(argc, argv, i++));
@@ -865,7 +866,8 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
         }
         // ch_sid.txt は実際に使用する変換ツールと同じディレクトリに配置
         // (nicojk_ass は exe_files 直下にあるが、.py を開発用に指定したときの場所にも対応して1つ上も探す)
-        const auto& nicoJKToolPath = !conf.nicoJKAssPath.empty()
+        // 両方を指定したときは、通常の取得に使うNicoConvASSのものを読む
+        const auto& nicoJKToolPath = !conf.nicoJKAssPath.empty() && !conf.nicoConvAssSpecified
             ? conf.nicoJKAssPath : conf.nicoConvAssPath;
         const auto toolDir = pathGetDirectory(pathNormalize(GetFullPathFrom(nicoJKToolPath.c_str())));
         conf.nicoConvChSidPath = toolDir + _T("/ch_sid.txt");

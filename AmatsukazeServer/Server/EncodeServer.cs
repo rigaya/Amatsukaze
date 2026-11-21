@@ -2079,6 +2079,29 @@ namespace Amatsukaze.Server
             return profile.NicoJKReferenceMode == 1 ? "replace" : "merge";
         }
 
+        // 実況の変換ツールの引数。WindowsでNicoConvASSを設定していればNicoConvASSを使う。
+        // 先行放送のコメントはnicojk_assだけが対応するので、使う設定ならNicoConvASSのときもnicojk_assを渡す
+        // (CLIは、通常の取得をNicoConvASSで行い、先行放送のコメントにnicojk_assを使う。手動の指定の有無はCLIが見る)。
+        internal static string GetNicoJKToolArguments(bool isWindows, string nicoConvAssPath, string nicoJKAssPath, string nicoJKAlt)
+        {
+            var useNicoConvAss = isWindows && !string.IsNullOrEmpty(nicoConvAssPath);
+            var useAlt = !string.IsNullOrEmpty(nicoJKAlt) && (!useNicoConvAss || !string.IsNullOrEmpty(nicoJKAssPath));
+            var sb = new StringBuilder();
+            if (useAlt)
+            {
+                sb.Append(" --nicojk-alt ").Append(nicoJKAlt);
+            }
+            if (useNicoConvAss)
+            {
+                sb.Append(" --nicoass \"").Append(nicoConvAssPath).Append("\"");
+            }
+            if (!useNicoConvAss || useAlt)
+            {
+                sb.Append(" --nicojkass \"").Append(nicoJKAssPath).Append("\"");
+            }
+            return sb.ToString();
+        }
+
         internal static string GetNicoJKProgramStartArgument(bool enabled, DateTime programStart)
         {
             if (!enabled || programStart <= new DateTime(2000, 1, 1)) return "";
@@ -2370,16 +2393,8 @@ namespace Amatsukaze.Server
                         }
                         sb.Append(" --nicojkmask ")
                             .Append(profile.NicoJKFormatMask);
-                        var useNicoConvAss = !Util.IsServerLinux()
-                            && !string.IsNullOrEmpty(setting.NicoConvASSPath);
-                        // 先行放送のコメントは、nicojk_assを使うときだけ意味がある(手動の指定の有無はCLIが見る)
-                        if (!useNicoConvAss && !string.IsNullOrEmpty(nicoJKAlt))
-                        {
-                            sb.Append(" --nicojk-alt ").Append(nicoJKAlt);
-                        }
-                        sb.Append(useNicoConvAss ? " --nicoass \"" : " --nicojkass \"")
-                            .Append(useNicoConvAss ? setting.NicoConvASSPath : setting.NicoJKAssPath)
-                            .Append("\"");
+                        sb.Append(GetNicoJKToolArguments(!Util.IsServerLinux(),
+                            setting.NicoConvASSPath, setting.NicoJKAssPath, nicoJKAlt));
                     }
 
                     if(profile.FilterOption == FilterOption.Setting)
