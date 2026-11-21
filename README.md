@@ -1088,7 +1088,7 @@ GPLのライブラリを組み込んでいるので、全体にGPLが適用さ�
 | [psisiarc](https://github.com/xtne6f/psisiarc) | MIT |
 | SCRename | 配布元の個別条件に従う |
 | [SCRenamePy](https://github.com/rigaya/SCRenamePy) | 配布元の個別条件に従う |
-| [nicojk_ass](https://github.com/rigaya/nicojk_ass)(別リポジトリ。ソースはMIT、配布するexeはGPL-3.0) | MIT |
+| [nicojk_ass](https://github.com/rigaya/nicojk_ass) | ソースはMIT、配布するexeはGPL-3.0 |
 | [danmaku2ass.py](https://github.com/m13253/danmaku2ass)(nicojk_assに同梱) | GPL-3.0 |
 | [libjpeg-turbo](https://github.com/libjpeg-turbo/libjpeg-turbo) | BSD系ライセンス（複数） |
 | [zlib](https://zlib.net/) | zlib License |
@@ -1151,7 +1151,7 @@ vcpkg integrate install
 次にzlib、libjpeg-turboを静的ライブラリとしてインストールします。
 
 ```bat
-vcpkg install zlib:x64-windows-static libjpeg-turbo:x64-windows-static
+vcpkg install zlib:x64-windows-static libjpeg-turbo[turbojpeg]:x64-windows-static
 ```
 
 libaribcaptionのビルドを自動で行います。そのため、Visual Studio Installerで「Windows 用 C++ CMake ツール」を導入し、gitにパスを通しておいてください。
