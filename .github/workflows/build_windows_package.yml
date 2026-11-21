@@ -262,7 +262,7 @@ jobs:
           echo --- package contents (after Assemble) ---
           tree /f package
 
-      # nicojk_ass(別リポジトリ)のリリースから、単一のexeとライセンスを取り込む。
+      # nicojk_ass(別リポジトリ)のリリースから、単一のexeだけを取り込む。
       # 版はここで決める。展開したexeの--versionが版と一致することを確かめる。
       - name: Add nicojk_ass
         shell: bash
@@ -276,9 +276,6 @@ jobs:
           7z x -y -onicojk_ass_x nicojk_ass.zip
           test "$(./nicojk_ass_x/nicojk_ass.exe --version | tr -d '\r')" = "nicojk_ass ${NICOJK_ASS_VERSION}"
           cp nicojk_ass_x/nicojk_ass.exe package/exe_files/
-          rm -rf package/exe_files/license/nicojk_ass
-          mkdir -p package/exe_files/license/nicojk_ass
-          cp -r nicojk_ass_x/LICENSE nicojk_ass_x/README.md nicojk_ass_x/danmaku2ass-license package/exe_files/license/nicojk_ass/
       - name: Create archive
         shell: cmd
         run: |
@@ -290,10 +287,6 @@ jobs:
           )
           if not exist package\\exe_files\\nicojk_ass.exe (
             echo ERROR: package\\exe_files\\nicojk_ass.exe がありません。
-            exit /b 1
-          )
-          if not exist package\\exe_files\\license\\nicojk_ass\\danmaku2ass-license\\COPYING (
-            echo ERROR: package\\exe_files\\license\\nicojk_ass\\danmaku2ass-license\\COPYING がありません。
             exit /b 1
           )
           set "PKG_NAME=Amatsukaze_${{ steps.version.outputs.version_name }}.7z"

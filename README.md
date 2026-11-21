@@ -543,7 +543,7 @@ AddTaskの終了コードは、`0`がタスク追加成功 (エンコード完�
 
   同梱のnicojk_ass(`exe_files/nicojk_ass`。Windowsは`nicojk_ass.exe`。[danmaku2ass](https://github.com/m13253/danmaku2ass)を内蔵)を使用してass字幕変換を行えます。Linuxでは変換ツールとしてnicojk_assのみを選択できます。WindowsではNicoConvAssのパスが設定されている場合はNicoConvAssを優先し、設定されていない場合はnicojk_assを使用します(「アニメの別の局のコメント」を使う録画は、NicoConvAssを設定していてもnicojk_assを使用します)。
 
-  nicojk_assは単体で動く実行ファイルで、Pythonは不要です。配布アーカイブの`exe_files/`に、[nicojk_assのリリース](https://github.com/rigaya/nicojk_ass/releases)の単一の実行ファイルを同梱しています(配布アーカイブを作るCIが、決めた版をリリースから取り込みます)。ライセンスは`exe_files/license/nicojk_ass/`にあります。
+  nicojk_assは単体で動く実行ファイルで、Pythonは不要です。配布アーカイブの`exe_files/`に、[nicojk_assのリリース](https://github.com/rigaya/nicojk_ass/releases)の単一の実行ファイルを同梱しています(配布アーカイブを作るCIが、決めた版をリリースから取り込みます)。ライセンス(実行ファイルはGPL-3)は、[nicojk_assのリポジトリ](https://github.com/rigaya/nicojk_ass)とリリースのzipを参照してください。
 
   開発用に、nicojk_assのソースをそのまま動かすこともできます。基本設定のnicojk_assのパス(または`--nicojkass`)に、ソースの`nicojk_ass.py`を指定してください(この場合はPython 3が必要です)。Linuxの手元のビルド(`scripts/build.sh`)は、隣のnicojk_assのリポジトリで作ったexe(`dist/nicojk_ass`。環境変数`NICOJK_ASS_EXE`で変えられます)があればコピーします。
 
@@ -1091,7 +1091,7 @@ GPLのライブラリを組み込んでいるので、全体にGPLが適用さ�
 | [psisiarc](https://github.com/xtne6f/psisiarc) | MIT |
 | SCRename | 配布元の個別条件に従う |
 | [SCRenamePy](https://github.com/rigaya/SCRenamePy) | 配布元の個別条件に従う |
-| nicojk_ass(別リポジトリ`nicojk_ass`。ソースはMIT、配布するexeはGPL-3.0) | MIT |
+| [nicojk_ass](https://github.com/rigaya/nicojk_ass)(別リポジトリ。ソースはMIT、配布するexeはGPL-3.0) | MIT |
 | [danmaku2ass.py](https://github.com/m13253/danmaku2ass)(nicojk_assに同梱) | GPL-3.0 |
 | [libjpeg-turbo](https://github.com/libjpeg-turbo/libjpeg-turbo) | BSD系ライセンス（複数） |
 | [zlib](https://zlib.net/) | zlib License |

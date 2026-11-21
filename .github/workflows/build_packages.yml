@@ -165,7 +165,7 @@ jobs:
           basepkg_archive="parts/basepkg/Amatsukaze_Linux_BasePkg_20261014_x64.tar.xz"
           test -s "$basepkg_archive"
           tar -xf "$basepkg_archive" -C pkg
-          # nicojk_ass(別リポジトリ)のリリースから、単一のexeとライセンスを取り込む。
+          # nicojk_ass(別リポジトリ)のリリースから、単一のexeだけを取り込む。
           # 版はここで決める。展開したexeの--versionが版と一致することを確かめる。
           NICOJK_ASS_VERSION=0.01
           NICOJK_ASS_REPO=https://github.com/rigaya/nicojk_ass
@@ -174,10 +174,8 @@ jobs:
           python3 -m zipfile -e nicojk_ass.zip nicojk_ass_x
           chmod 755 nicojk_ass_x/nicojk_ass
           test "$(./nicojk_ass_x/nicojk_ass --version)" = "nicojk_ass ${NICOJK_ASS_VERSION}"
-          rm -rf pkg/exe_files/nicojk_ass pkg/exe_files/license/nicojk_ass
+          rm -rf pkg/exe_files/nicojk_ass
           install -m 755 nicojk_ass_x/nicojk_ass pkg/exe_files/nicojk_ass
-          mkdir -p pkg/exe_files/license/nicojk_ass
-          cp -r nicojk_ass_x/LICENSE nicojk_ass_x/README.md nicojk_ass_x/danmaku2ass-license pkg/exe_files/license/nicojk_ass/
           docker pull "ghcr.io/${{ github.repository_owner }}/amatsukaze-builder:ubuntu2004"
           docker run --rm \
             -v "${{ github.workspace }}:/work" \
