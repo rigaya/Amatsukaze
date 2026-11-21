@@ -1445,15 +1445,16 @@ bool TestAudioChannelConversion(tstring& diagnostic) {
 // コマンドライン引数: 解析結果をキー=値のテキストで受け取り、値を比較する
 using CommandLineResult = std::map<tstring, tstring>;
 
-int ParseCommandLine(const std::vector<tstring>& args, CommandLineResult& result) {
+int ParseCommandLine(const std::vector<tstring>& args, CommandLineResult& result,
+    decltype(&ParseCommandLineForTest) parse = ParseCommandLineForTest) {
     std::vector<const TCHAR*> argv = { _T("AmatsukazeTest") };
     for (const auto& arg : args) argv.push_back(arg.c_str());
     result.clear();
     size_t length = 0;
-    int status = ParseCommandLineForTest((int)argv.size(), argv.data(), nullptr, 0, &length);
+    int status = parse((int)argv.size(), argv.data(), nullptr, 0, &length);
     if (status != -2) return status;
     std::vector<TCHAR> buffer(length + 1);
-    status = ParseCommandLineForTest((int)argv.size(), argv.data(), buffer.data(), buffer.size(), &length);
+    status = parse((int)argv.size(), argv.data(), buffer.data(), buffer.size(), &length);
     if (status != 0) return status;
     const tstring text(buffer.data(), length);
     size_t begin = 0;
@@ -1496,7 +1497,7 @@ bool ExpectCommandLineStatus(const std::vector<tstring>& args, int expectedStatu
 }
 
 bool TestCommandLineArguments(tstring& diagnostic) {
-    // 探索対象の実行ファイル名はPATHやモジュール位置で変わるため、比較する実行ファイルは存在しない絶対パスを明示指定する。
+    // 実行ファイルの探索を無効にして、指定パスと既定値を直接確認する。
     // パス区切りは両OSで'/'に正規化される。出力ファイルは .mp4 .mkv .m2ts .ts (大文字小文字不問) だけが除かれ、他の拡張子は残る。
     const tstring encoderOptions = _T("--preset slow --profile main --crf 23 --qcomp 0.7 --vbv-bufsize 10000 --keyint -1 --level 3");
     std::vector<tstring> args = {
@@ -1549,9 +1550,7 @@ bool TestCommandLineArguments(tstring& diagnostic) {
         const std::filesystem::path script(scriptPath->second);
         if (!Expect(script.is_absolute() && script.filename() == std::filesystem::path(_T("nicojk_ass")),
             _T("既定の実況ツールがnicojk_ass(同梱の実行ファイル)の絶対パスではない"), diagnostic)) return false;
-        if (!Expect(sid.is_absolute() && sid.filename() == std::filesystem::path(_T("ch_sid.txt")) &&
-            sid.parent_path() == script.parent_path() && sid != std::filesystem::path(_T("/ch_sid.txt")),
-            _T("実況チャンネル表がスクリプトと同じディレクトリの絶対パスではない"), diagnostic)) return false;
+        // チャンネル表の隣接・親ディレクトリへのフォールバックは専用ケースで検証する。
     }
     // 空文字列の引数は無視され、出力は最後の既知拡張子だけが除かれる
     if (!ExpectCommandLine({ _T(""), _T("-i"), _T("a.ts"), _T("-o"), _T("dir/b.c.mkv"), _T("-w"), _T("work"), _T("") },
@@ -2325,7 +2324,7 @@ bool TestPsWriterRoundTrip(tstring& diagnostic) {
     return Expect(!ParsePsStream(truncated, unused, unusedCount, ignored), _T("終了コードのないPSが受理されました"), diagnostic);
 }
 
-// 音声トラックの構築・StreamReformの音声: 一時ディレクトリは自分で作り、終了時に必ず削除する
+// 一時ディレクトリは自分で作り、終了時に必ず削除する。
 class ScopedTempDirectory {
 public:
     ScopedTempDirectory() {
@@ -2349,6 +2348,101 @@ private:
     std::filesystem::path path_;
     bool created_ = false;
 };
+
+class ScopedExecutablePath {
+public:
+    ScopedExecutablePath() {
+#if defined(_WIN32) || defined(_WIN64)
+        const DWORD size = GetEnvironmentVariableW(L"PATH", nullptr, 0);
+        if (size != 0) {
+            previous_.resize(size);
+            const DWORD length = GetEnvironmentVariableW(L"PATH", previous_.data(), size);
+            previous_.resize(length);
+            hadPrevious_ = true;
+        }
+#else
+        if (const auto* value = std::getenv("PATH")) {
+            previous_ = value;
+            hadPrevious_ = true;
+        }
+#endif
+    }
+
+    ~ScopedExecutablePath() {
+        if (!changed_) return;
+#if defined(_WIN32) || defined(_WIN64)
+        SetEnvironmentVariableW(L"PATH", hadPrevious_ ? previous_.c_str() : nullptr);
+#else
+        if (hadPrevious_) setenv("PATH", previous_.c_str(), 1);
+        else unsetenv("PATH");
+#endif
+    }
+
+    bool set(const tstring& paths) {
+#if defined(_WIN32) || defined(_WIN64)
+        changed_ = SetEnvironmentVariableW(L"PATH", paths.c_str()) != 0;
+#else
+        changed_ = setenv("PATH", paths.c_str(), 1) == 0;
+#endif
+        return changed_;
+    }
+
+private:
+    tstring previous_;
+    bool hadPrevious_ = false;
+    bool changed_ = false;
+};
+
+bool TestCommandLineExecutableSearch(tstring& diagnostic) {
+    ScopedTempDirectory directory;
+    if (!Expect(directory.ok(), _T("一時ディレクトリを作成できない"), diagnostic)) return false;
+    const std::filesystem::path root(directory.path());
+    const auto first = root / "first";
+    const auto second = root / "second";
+    std::filesystem::create_directory(first);
+    std::filesystem::create_directory(second);
+#if defined(_WIN32) || defined(_WIN64)
+    const auto executableName = root.filename().native() + _T(".exe");
+    const auto separator = _T(";");
+#else
+    const auto executableName = root.filename().native();
+    const auto separator = _T(":");
+#endif
+    const auto firstTool = first / executableName;
+    const auto otherTool = second / executableName;
+    const auto parentTable = root / "ch_sid.txt";
+    const auto siblingTable = first / "ch_sid.txt";
+    auto createFixture = [](const std::filesystem::path& path) {
+        std::ofstream file(path);
+        file << '\n';
+        file.close();
+        return file.good();
+    };
+    if (!Expect(createFixture(firstTool) && createFixture(otherTool) && createFixture(parentTable),
+        _T("探索用ファイルを作成できない"), diagnostic)) return false;
+#if !(defined(_WIN32) || defined(_WIN64))
+    for (const auto& path : { firstTool, otherTool }) {
+        std::filesystem::permissions(path, std::filesystem::perms::owner_exec, std::filesystem::perm_options::add);
+    }
+#endif
+
+    // 専用ディレクトリだけを探索し、プロセスのPATHはケース終了時に戻す。
+    ScopedExecutablePath path;
+    if (!Expect(path.set(first.native() + separator + second.native()), _T("試験用PATHを設定できない"), diagnostic)) return false;
+    const std::vector<tstring> args = { _T("-i"), _T("in.ts"), _T("-o"), _T("out.mp4"),
+        _T("--nicojkass"), executableName };
+    CommandLineResult result;
+    auto resolved = [&]() {
+        return ParseCommandLine(args, result, ParseCommandLineWithExecutableSearchForTest) == 0
+            && std::filesystem::path(result.at(_T("nicojk_ass_path"))).lexically_normal() == firstTool;
+    };
+    if (!Expect(resolved(), _T("PATHの先頭にある実況ツールが選ばれない"), diagnostic)) return false;
+    if (!Expect(std::filesystem::path(result.at(_T("nicojk_ch_sid_path"))).lexically_normal() == parentTable,
+        _T("親ディレクトリのチャンネル表へフォールバックしない"), diagnostic)) return false;
+    if (!Expect(createFixture(siblingTable), _T("隣接するチャンネル表を作成できない"), diagnostic)) return false;
+    return Expect(resolved() && std::filesystem::path(result.at(_T("nicojk_ch_sid_path"))).lexically_normal() == siblingTable,
+        _T("隣接するチャンネル表が優先されない"), diagnostic);
+}
 
 struct ReformRun {
     AudioReformResultForTest result = {};
@@ -4327,6 +4421,7 @@ constexpr TestCase TEST_CASES[] = {
     { _T("audio_channel_conversion"), TestAudioChannelConversion },
     { _T("subprocess_start_order"), TestSubProcessStart },
     { _T("command_line_arguments"), TestCommandLineArguments },
+    { _T("command_line_executable_search"), TestCommandLineExecutableSearch },
     { _T("nicojk_source"), TestNicoJKSource },
     { _T("cm_cut_offset"), TestCMCutOffset },
     { _T("cm_cut_offset_command_line"), TestCMCutOffsetCommandLine },
@@ -4387,6 +4482,7 @@ int RunTestCase(const TestCase& testCase) {
         tstring diagnostic;
         if (testCase.run(diagnostic)) {
             _ftprintf(stdout, _T("[PASS] %s\n"), testCase.name);
+            fflush(stdout);
             return 0;
         }
         _ftprintf(stderr, _T("[FAIL] %s: %s\n"), testCase.name, diagnostic.c_str());

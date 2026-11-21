@@ -903,7 +903,10 @@ static void parseOneOption(int argc, const tchar* argv[], int& i, Config& conf, 
     THROWF(FormatException, "不明なオプション: %s", key.c_str());
 }
 
-static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const tchar* argv[]) {
+using ResolveCliExecutable = tstring (*)(const tstring&);
+
+static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const tchar* argv[],
+    ResolveCliExecutable resolveExecutable = SearchExe) {
 #if defined(_WIN32) || defined(_WIN64)
     tstring exeAppendix = _T(".exe");
 #else
@@ -1096,9 +1099,9 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
 
     // exeを探す
     if (conf.mode != _T("drcs") && !starts_with(conf.mode, _T("probe_"))) {
-        auto search = [](const tstring& path) {
-            return pathNormalize(SearchExe(path));
-            };
+        auto search = [resolveExecutable](const tstring& path) {
+            return pathNormalize(resolveExecutable(path));
+        };
         conf.chapterExePath = search(conf.chapterExePath);
         conf.encoderPath = search(conf.encoderPath);
         if (conf.encoderFilterPath.size() > 0) {
@@ -1150,8 +1153,8 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
 // 作業ディレクトリはgetTmpDirが一時ディレクトリの作成を要するため含めない。
 // 成功時0、Amatsukaze例外 (引数の拒否。数値や種別の不正を含む) 時1、想定外の例外時2、
 // 引数不正時-1、出力バッファ不足時-2 (outputLengthに終端を除く必要文字数) を返す。
-extern "C" AMATSUKAZE_API int ParseCommandLineForTest(int argc, const tchar* const* argv,
-    tchar* output, size_t outputCapacity, size_t* outputLength) {
+static int parseCommandLineForTest(int argc, const tchar* const* argv,
+    tchar* output, size_t outputCapacity, size_t* outputLength, ResolveCliExecutable resolveExecutable) {
     constexpr int RESULT_REJECTED = 1;
     constexpr int RESULT_OTHER_EXCEPTION = 2;
     constexpr int RESULT_INVALID = -1;
@@ -1160,7 +1163,7 @@ extern "C" AMATSUKAZE_API int ParseCommandLineForTest(int argc, const tchar* con
     *outputLength = 0;
     try {
         AMTContext ctx;
-        const auto setting = parseArgs(ctx, argc, const_cast<const tchar**>(argv));
+        const auto setting = parseArgs(ctx, argc, const_cast<const tchar**>(argv), resolveExecutable);
         tstring text;
         auto add = [&](const tchar* key, const tstring& value) { text += tstring(key) + _T("=") + value + _T("\n"); };
         auto addInt = [&](const tchar* key, long long value) { add(key, StringFormat(_T("%lld"), value)); };
@@ -1229,6 +1232,18 @@ extern "C" AMATSUKAZE_API int ParseCommandLineForTest(int argc, const tchar* con
     } catch (const std::exception&) {
         return RESULT_OTHER_EXCEPTION;
     }
+}
+
+extern "C" AMATSUKAZE_API int ParseCommandLineForTest(int argc, const tchar* const* argv,
+    tchar* output, size_t outputCapacity, size_t* outputLength) {
+    // 引数の値や既定値の試験では、ホストのPATHから実行ファイルを探索しない。
+    return parseCommandLineForTest(argc, argv, output, outputCapacity, outputLength,
+        [](const tstring& path) { return path; });
+}
+
+extern "C" AMATSUKAZE_API int ParseCommandLineWithExecutableSearchForTest(int argc, const tchar* const* argv,
+    tchar* output, size_t outputCapacity, size_t* outputLength) {
+    return parseCommandLineForTest(argc, argv, output, outputCapacity, outputLength, SearchExe);
 }
 
 static std::mutex g_log_mutex;

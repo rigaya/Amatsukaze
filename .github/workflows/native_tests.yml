@@ -13,6 +13,7 @@ jobs:
   linux:
     name: Linux Release
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -57,6 +58,7 @@ jobs:
   windows:
     name: Windows Release
     runs-on: windows-2025-vs2026
+    timeout-minutes: 45
     env:
       VCPKG_DEFAULT_TRIPLET: x64-windows-static
       VCPKG_CRT_LINKAGE: static

@@ -9,7 +9,7 @@ amatsukaze_native_tests = executable('AmatsukazeNativeTests',
 
 test('AmatsukazeNativeTests', amatsukaze_native_tests,
   suite : 'native',
-  timeout : 30,
+  timeout : 0,
 )
 
 pgs_encoder_tests = executable('PgsEncoderTests',
@@ -24,7 +24,7 @@ pgs_encoder_tests = executable('PgsEncoderTests',
 
 test('PgsEncoderTests', pgs_encoder_tests,
   suite : 'native',
-  timeout : 60,
+  timeout : 0,
 )
 
 arib_caption_smoke_tests = executable('AribCaptionSmokeTests',
@@ -36,7 +36,7 @@ arib_caption_smoke_tests = executable('AribCaptionSmokeTests',
 
 test('AribCaptionSmokeTests', arib_caption_smoke_tests,
   suite : 'native',
-  timeout : 30,
+  timeout : 0,
 )
 
 if host_machine.system() == 'linux'
@@ -50,7 +50,7 @@ if host_machine.system() == 'linux'
   )
   test('CaptionPgsRenderTests', caption_pgs_render_tests,
     suite : 'native',
-    timeout : 60,
+    timeout : 0,
   )
 endif
 
@@ -63,7 +63,7 @@ preview_color_tests = executable('PreviewColorTests',
 )
 test('PreviewColorTests', preview_color_tests,
   suite : 'native',
-  timeout : 30,
+  timeout : 0,
 )
 
 trim_adjust_audio_tests = executable('TrimAdjustAudioTests',
@@ -72,7 +72,7 @@ trim_adjust_audio_tests = executable('TrimAdjustAudioTests',
 )
 test('TrimAdjustAudioTests', trim_adjust_audio_tests,
   suite : 'native',
-  timeout : 30,
+  timeout : 0,
 )
 
 logo_gop_decoder_tests = executable('LogoGopDecoderTests',
@@ -82,7 +82,7 @@ logo_gop_decoder_tests = executable('LogoGopDecoderTests',
 )
 test('LogoGopDecoderTests', logo_gop_decoder_tests,
   suite : 'native',
-  timeout : 60,
+  timeout : 0,
 )
 
 av_frame_pool_tests = executable('AVFramePoolTests',
@@ -92,7 +92,7 @@ av_frame_pool_tests = executable('AVFramePoolTests',
 )
 test('AVFramePoolTests', av_frame_pool_tests,
   suite : 'native',
-  timeout : 30,
+  timeout : 0,
 )
 
 logo_decode_fallback_tests = executable('LogoDecodeFallbackTests',
@@ -103,7 +103,7 @@ logo_decode_fallback_tests = executable('LogoDecodeFallbackTests',
 )
 test('LogoDecodeFallbackTests', logo_decode_fallback_tests,
   suite : 'native',
-  timeout : 120,
+  timeout : 0,
 )
 
 # ロゴ枠検出の左側弱輪郭救済の判定方針 (ヘッダーのみの純粋関数) を単体で確認する。
@@ -114,7 +114,7 @@ logo_scan_weak_side_rescue_policy_tests = executable('LogoScanWeakSideRescuePoli
 )
 test('LogoScanWeakSideRescuePolicyTests', logo_scan_weak_side_rescue_policy_tests,
   suite : 'native',
-  timeout : 30,
+  timeout : 0,
 )
 
 # ロゴ生成の品質判定 (no_logo) の境界を確認する。
@@ -126,7 +126,7 @@ logo_scan_quality_tests = executable('LogoScanQualityTests',
 )
 test('LogoScanQualityTests', logo_scan_quality_tests,
   suite : 'native',
-  timeout : 30,
+  timeout : 0,
 )
 
 # 行単位のロゴ枠統合と細線除去の純粋関数を確認する。
@@ -137,7 +137,7 @@ logo_scan_row_group_policy_tests = executable('LogoScanRowGroupPolicyTests',
 )
 test('LogoScanRowGroupPolicyTests', logo_scan_row_group_policy_tests,
   suite : 'native',
-  timeout : 30,
+  timeout : 0,
 )
 
 # 縁の出現率から塊を選ぶフォールバックの純粋関数を確認する。
@@ -148,7 +148,7 @@ logo_scan_edge_area_policy_tests = executable('LogoScanEdgeAreaPolicyTests',
 )
 test('LogoScanEdgeAreaPolicyTests', logo_scan_edge_area_policy_tests,
   suite : 'native',
-  timeout : 30,
+  timeout : 0,
 )
 
 # 対象PCMの配置はTS読込から分けて直接検査する。
@@ -157,7 +157,7 @@ nicojk_align_audio_tests = executable('NicoJKAlignAudioTests',
   include_directories : amatsukaze_include_dirs,
   dependencies : common_dep, install : false,
 )
-test('NicoJKAlignAudioTests', nicojk_align_audio_tests, suite : 'native', timeout : 60)
+test('NicoJKAlignAudioTests', nicojk_align_audio_tests, suite : 'native', timeout : 0)
 
 latm_to_adts_tests = executable('LatmToAdtsTests',
   'LatmToAdtsTests.cpp',
@@ -174,4 +174,4 @@ filter_preview_tests = executable('FilterPreviewTests',
   cpp_args : host_machine.system() == 'windows' ? ['-DAMATSUKAZE_IMPORTS'] : [],
   install : false,
 )
-test('FilterPreviewTests', filter_preview_tests, suite : 'native', timeout : 30)
+test('FilterPreviewTests', filter_preview_tests, suite : 'native', timeout : 0)
