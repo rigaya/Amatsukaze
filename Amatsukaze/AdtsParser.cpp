@@ -95,15 +95,25 @@ AdtsParser::~AdtsParser() {
 
 /* virtual */ void AdtsParser::reset() {
     decodedBuffer.release();
+    latmToAdts.reset();
 }
 
 /* virtual */ bool AdtsParser::inputFrame(MemoryChunk frame__, std::vector<AudioFrameData>& info, int64_t PTS) {
     info.clear();
     decodedBuffer.clear();
+    const int64_t inputPTS = PTS;
+    bool continuedFrame = false;
+    try {
+        latmToAdts.input(frame__.data, frame__.length, PTS, normalizedAudio, &continuedFrame);
+    } catch (const std::runtime_error&) {
+        THROW(FormatException, "LATM音声が破損しているか、ADTSへ無劣化変換できない構成です");
+    }
+    frame__ = MemoryChunk(normalizedAudio.data(), normalizedAudio.size());
 
     // codedBufferは次にinputFrameが呼ばれるまでデータを保持する必要があるので
     // inputFrameの先頭で前のinputFrame呼び出しで読んだデータを消す
     codedBuffer.trimHead(bytesConsumed_);
+    bytesConsumed_ = 0;
 
     if (codedBuffer.size() >= (1 << 13)) {
         // 不正なデータが続くと処理されないデータが永遠と増えていくので
@@ -114,6 +124,13 @@ AdtsParser::~AdtsParser() {
     }
 
     int prevDataSize = (int)codedBuffer.size();
+    if (continuedFrame && !normalizedAudio.empty()) {
+        // LOASヘッダーやフレームがPESを跨いだ場合も、従来のADTSと同じく
+        // 新しいPESのPTSは、跨いだフレームの次のフレームへ適用する。
+        if (lastPTS_ < 0) lastPTS_ = PTS;
+        PTS = inputPTS;
+        prevDataSize = std::max(prevDataSize, 1);
+    }
     codedBuffer.add(frame__);
     MemoryChunk frame = codedBuffer.get();
 

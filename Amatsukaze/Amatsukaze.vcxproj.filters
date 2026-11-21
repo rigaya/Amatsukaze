@@ -27,6 +27,9 @@
     <ClInclude Include="AdtsParser.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="LatmToAdts.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
     <ClInclude Include="AmatsukazeTestImpl.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>

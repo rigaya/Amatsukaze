@@ -219,3 +219,9 @@ Linuxでは`fonts-noto-cjk`と`fontconfig-config`を導入してから`meson tes
 `LogoGopDecoderTests`はOpen/Closed GOP、表示順と全YUV画素の一致に加え、同一パケット内の上下フィールドペアを検証する。片フィールド、同じパリティ、temporal_reference不一致、余分なピクチャー、slice欠落などの未対応配置を拒否し、復号エラーとコールバック例外、メモリ不足を区別する。
 
 `LogoDecodeFallbackTests`は既知のロゴを持つMPEG-2のTSを生成し、途中へ画素を変えない量子化行列更新を挿入して公開C APIを呼ぶ。枠検出・ロゴ生成を途中まで進めてから通常復号で先頭から再試行し、枠とスコア、生成LGDが基準と一致することを確認する。共有デコードセッションの枠検出中・生成中の失敗、通常復号設定の引き継ぎ、キャンセル時の再試行除外、再試行先も失敗する場合の回数制限と両原因の保持も検証する。外部素材やネットワークは使わない。
+
+## LOAS/LATM音声のADTS変換
+
+`LatmToAdtsTests`は、単一program/layerのAAC-LCを合成し、LOASヘッダー・設定・音声データの各位置での分割入力、設定の再利用、設定のない録画先頭、リセット、PES跨ぎのPTS、既存ADTS内の偽同期語、未対応構成の拒否を確認する。
+
+入力TSのstream_typeが0x11の音声も選択し、`AdtsParser`入口で圧縮音声を変えずADTSへ包み直す。対応範囲はaudioMuxVersion=0、単一program/layer、numSubFrames=0、AAC Main/LC/SSR/LTP、1024サンプル、PCEなしの構成。明示SBR/PS、多program/layerなどADTSへ変換できない構成はエラーとする。ADTS/LATMの判定は最初の入力で固定するため、同一音声トラック内での両方式の動的切替には対応しない。

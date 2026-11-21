@@ -442,6 +442,7 @@ call "$(MSBuildThisFileDirectory)..\scripts\build_libaribcaption_win.bat" $(Plat
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="AdtsParser.h" />
+    <ClInclude Include="LatmToAdts.h" />
     <ClInclude Include="AmatsukazeTestImpl.h" />
     <ClInclude Include="Amatsukaze_version.h" />
     <ClInclude Include="AMTLogo.h" />

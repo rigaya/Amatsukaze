@@ -1201,8 +1201,8 @@ bool TsPacketSelector::isVideo(uint8_t stream_type) {
 }
 
 bool TsPacketSelector::isAudio(uint8_t stream_type) {
-    // AAC以外未対応
-    return (stream_type == 0x0F);
+    // ADTSとLOAS/LATMのAACを受け付ける。
+    return (stream_type == 0x0F || stream_type == 0x11);
 }
 
 bool TsPacketSelector::isCaption(uint8_t stream_type) {
@@ -1224,7 +1224,7 @@ bool TsPacketSelector::isCaption(uint8_t stream_type) {
     case 0x0F: // ISO/IEC 13818-7 ADTS AAC (MPEG-2 lower bit-rate audio) in a packetized stream
         return _T("ADTS AAC");
     case 0x11: // ISO/IEC 14496-3 (MPEG-4 LOAS multi-format framed audio) in a packetized stream
-        return _T("MPEG4 AAC");
+        return _T("LOAS/LATM AAC");
     case 0x1B: // ITU-T Rec. H.264 and ISO/IEC 14496-10 (lower bit-rate video) in a packetized stream
         return _T("H.264/AVC");
     case 0x24: // ITU-T Rec. H.265 and ISO/IEC 23008-2 (Ultra HD video) in a packetized stream

@@ -15,6 +15,7 @@
 #include <map>
 
 #include "StreamUtils.h"
+#include "LatmToAdts.h"
 
 enum AAC_SYNTAX_ELEMENTS {
     ID_SCE = 0x0,
@@ -106,6 +107,8 @@ public:
     virtual bool inputFrame(MemoryChunk frame__, std::vector<AudioFrameData>& info, int64_t PTS);
 
 private:
+    LatmToAdts latmToAdts;
+    std::vector<uint8_t> normalizedAudio;
     AudioDecodeDiagnostics* diagnostics_ = nullptr;
     void warn(const tchar* message);
     void decodeError();

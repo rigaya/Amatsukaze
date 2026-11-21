@@ -158,3 +158,12 @@ nicojk_align_audio_tests = executable('NicoJKAlignAudioTests',
   dependencies : common_dep, install : false,
 )
 test('NicoJKAlignAudioTests', nicojk_align_audio_tests, suite : 'native', timeout : 60)
+
+latm_to_adts_tests = executable('LatmToAdtsTests',
+  'LatmToAdtsTests.cpp',
+  install : false,
+)
+test('LatmToAdtsTests', latm_to_adts_tests,
+  suite : 'native',
+  timeout : 30,
+)
