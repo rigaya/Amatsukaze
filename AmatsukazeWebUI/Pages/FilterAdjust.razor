@@ -104,7 +104,8 @@
             <div class="fa-transport">
                 @if (IsEncoder)
                 {
-                    <input class="fa-seek" type="range" min="0" max="@FormatSeconds(_encoderDurationSeconds ?? 0)" step="any"
+                    @* 最大値の変更でブラウザーが丸めた値を引き継がず、新しい範囲に現在時刻を設定する。 *@
+                    <input @key="EncoderSeekMax" class="fa-seek" type="range" min="0" max="@EncoderSeekMax" step="any"
                            value="@EncoderSeekValue" @oninput='e => SeekEncoderAsync(e, "drag")' @onchange='e => SeekEncoderAsync(e, "commit")'
                            disabled="@(!CanOperate || _encoderDurationSeconds is not > 0)" aria-label="シーク" />
                 }
