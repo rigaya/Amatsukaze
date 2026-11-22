@@ -266,6 +266,643 @@ static int parseIntOption(const tstring& key, const tstring& value, int base = 1
     return (int)result;
 }
 
+// 1個のオプションを解釈し、値を取る場合は引数の位置も進める。
+static void parseOneOption(int argc, const tchar* argv[], int& i, Config& conf, bool& nicojk) {
+    const tstring key = argv[i];
+
+    if (key == _T("--loadv2")) {
+        return; // DLLの選択時に処理済み
+    }
+    if (key == _T("-i") || key == _T("--input")) {
+        conf.srcFilePath = pathNormalize(getParam(argc, argv, i++));
+        return;
+    }
+    if (key == _T("--original-input-file")) {
+        conf.srcFilePathOrg = pathNormalize(getParam(argc, argv, i++));
+        return;
+    }
+    if (key == _T("-o") || key == _T("--output")) {
+        conf.outVideoPath =
+            pathRemoveExtension(pathNormalize(getParam(argc, argv, i++)));
+        return;
+    }
+    if (key == _T("--mode")) {
+        conf.mode = getParam(argc, argv, i++);
+        return;
+    }
+    if (key == _T("-a") || key == _T("--args")) {
+        conf.modeArgs = getParam(argc, argv, i++);
+        return;
+    }
+    if (key == _T("-w") || key == _T("--work")) {
+        conf.workDir = pathNormalize(getParam(argc, argv, i++));
+        if (conf.workDir.size() == 0) {
+            conf.workDir = _T("./");
+        }
+        return;
+    }
+    if (key == _T("-et") || key == _T("--encoder-type")) {
+        tstring arg = getParam(argc, argv, i++);
+        conf.encoder = encoderFtomString(arg);
+        if (conf.encoder == ENCODER_INVALID) {
+            THROWF(ArgumentException, "--encoder-typeの指定が間違っています: %" PRITSTR "", arg);
+        }
+        return;
+    }
+    if (key == _T("-e") || key == _T("--encoder")) {
+        conf.encoderPath = pathNormalize(getParam(argc, argv, i++));
+        return;
+    }
+    if (key == _T("-eo") || key == _T("--encoder-option")) {
+        conf.encoderOptions = getParam(argc, argv, i++);
+        return;
+    }
+    if (key == _T("-eft") || key == _T("--encoder-filter-type")) {
+        tstring arg = getParam(argc, argv, i++);
+        conf.encoderFilter = encoderFtomString(arg);
+        if (conf.encoderFilter == ENCODER_INVALID) {
+            THROWF(ArgumentException, "--encoder-filter-typeの指定が間違っています: %" PRITSTR "", arg);
+        }
+        return;
+    }
+    if (key == _T("-ef") || key == _T("--encoder-filter")) {
+        conf.encoderFilterPath = pathNormalize(getParam(argc, argv, i++));
+        return;
+    }
+    if (key == _T("-efo") || key == _T("--encoder-filter-option")) {
+        conf.encoderFilterOptions = getParam(argc, argv, i++);
+        return;
+    }
+    if (key == _T("-efd") || key == _T("--encoder-filter-deint")) {
+        conf.encoderFilterDeinterlace = true;
+        return;
+    }
+    if (key == _T("--muxer-add-encoder-cmd")) {
+        conf.muxerAddEncoderCmd = true;
+        return;
+    }
+    if (key == _T("--sar-in-container-only")) {
+        conf.sarInContainerOnly = true;
+        return;
+    }
+    if (key == _T("--enc-parallel")) {
+        const auto arg = getParam(argc, argv, i++);
+        int parallel = parseIntOption(key, arg);
+        if (parallel < 1) {
+            THROWF(ArgumentException, "--enc-parallelには1以上の値を指定してください");
+        }
+        conf.encoderParallel = parallel;
+        return;
+    }
+    if (key == _T("--min-output-duration")) {
+        conf.minOutputDuration = parseIntOption(key, getParam(argc, argv, i++));
+        return;
+    }
+    if (key == _T("--sar")) {
+        const auto arg = getParam(argc, argv, i++);
+        int ret = sscanfT(arg.c_str(), _T("%d:%d"), &conf.userSAR.first, &conf.userSAR.second);
+        if (ret < 2) {
+            THROWF(ArgumentException, "--sarの指定が間違っています");
+        }
+        return;
+    }
+    if (key == _T("-aet") || key == _T("--audio-encoder-type")) {
+        tstring arg = getParam(argc, argv, i++);
+        conf.audioEncoder = audioEncoderFtomString(arg);
+        if (conf.audioEncoder == AUDIO_ENCODER_INVALID) {
+            THROWF(ArgumentException, "--audio-encoder-typeの指定が間違っています: %" PRITSTR "", arg);
+        }
+        return;
+    }
+    if (key == _T("--ignore-video-display-changes")) {
+        conf.ignoreVideoDisplayChanges = true;
+        return;
+    }
+    if (key == _T("--audio-format-change")) {
+        const tstring arg = getParam(argc, argv, i++);
+        if (arg == _T("split")) {
+            conf.audioFormatChangeMode = AFC_SPLIT;
+        } else if (arg == _T("merge")) {
+            conf.audioFormatChangeMode = AFC_MERGE;
+        } else if (arg == _T("separate")) {
+            conf.audioFormatChangeMode = AFC_SEPARATE;
+        } else {
+            THROW(ArgumentException, "--audio-format-changeにはsplit、merge、separateを指定してください");
+        }
+        return;
+    }
+    if (key == _T("-ae") || key == _T("--audio-encoder")) {
+        conf.audioEncoderPath = pathNormalize(getParam(argc, argv, i++));
+        return;
+    }
+    if (key == _T("-aeo") || key == _T("--audio-encoder-option")) {
+        conf.audioEncoderOptions = getParam(argc, argv, i++);
+        return;
+    }
+    if (key == _T("-ab") || key == _T("--audio-bitrate")) {
+        conf.audioBitrateInKbps = parseIntOption(key, getParam(argc, argv, i++));
+        return;
+    }
+    if (key == _T("-b") || key == _T("--bitrate")) {
+        const auto arg = getParam(argc, argv, i++);
+        int ret = sscanfT(arg.c_str(), _T("%lf:%lf:%lf:%lf"),
+            &conf.bitrate.a, &conf.bitrate.b, &conf.bitrate.h264, &conf.bitrate.h265);
+        if (ret < 3) {
+            THROWF(ArgumentException, "--bitrateの指定が間違っています");
+        }
+        if (ret <= 3) {
+            conf.bitrate.h265 = 2;
+        }
+        conf.autoBitrate = true;
+        return;
+    }
+    if (key == _T("-bcm") || key == _T("--bitrate-cm")) {
+        const auto arg = getParam(argc, argv, i++);
+        int ret = sscanfT(arg.c_str(), _T("%lf"), &conf.bitrateCM);
+        if (ret == 0) {
+            THROWF(ArgumentException, "--bitrate-cmの指定が間違っています");
+        }
+        return;
+    }
+    if (key == _T("--cm-quality-offset")) {
+        const auto arg = getParam(argc, argv, i++);
+        int ret = sscanfT(arg.c_str(), _T("%lf"), &conf.cmQualityOffset);
+        if (ret == 0) {
+            THROWF(ArgumentException, "--cm-quality-offsetの指定が間違っています");
+        }
+        return;
+    }
+    if (key == _T("--cm-cut-offset")) {
+        conf.cmCutOffsetFrames = parseIntOption(key, getParam(argc, argv, i++));
+        if (conf.cmCutOffsetFrames <= 0) {
+            THROWF(ArgumentException, "--cm-cut-offsetには正のフレーム数を指定してください");
+        }
+        return;
+    }
+    if (key == _T("--2pass")) {
+        conf.twoPass = true;
+        return;
+    }
+    if (key == _T("--splitsub")) {
+        conf.splitSub = true;
+        return;
+    }
+    if (key == _T("-fmt") || key == _T("--format")) {
+        const auto arg = getParam(argc, argv, i++);
+        if (arg == _T("mp4")) {
+            conf.format = FORMAT_MP4;
+        } else if (arg == _T("mkv")) {
+            conf.format = FORMAT_MKV;
+        } else if (arg == _T("m2ts")) {
+            conf.format = FORMAT_M2TS;
+        } else if (arg == _T("ts")) {
+            conf.format = FORMAT_TS;
+        } else if (arg == _T("tsreplace")) {
+            conf.format = FORMAT_TSREPLACE;
+        } else {
+            THROWF(ArgumentException, "--formatの指定が間違っています: %" PRITSTR "", arg);
+        }
+        return;
+    }
+    if (key == _T("--tsreplace-remove-typed")) {
+        conf.tsreplaceRemoveTypeD = true;
+        return;
+    }
+    if (key == _T("--tsreplace-startup-preroll")) {
+        conf.tsreplaceStartupPreroll = parseIntOption(key, getParam(argc, argv, i++));
+        return;
+    }
+    if (key == _T("--mux-ts-temp")) {
+        conf.muxTsTemp = true;
+        return;
+    }
+    if (key == _T("--use-mkv-when-sub-exists")) {
+        conf.useMKVWhenSubExist = true;
+        return;
+    }
+    if (key == _T("--mpeg2-partial")) {
+        conf.mpeg2Partial = true;
+        return;
+    }
+    if (key == _T("--chapter")) {
+        conf.chapter = true;
+        return;
+    }
+    if (key == _T("--output-chapter")) {
+        conf.outputChapter = true;
+        return;
+    }
+    if (key == _T("--subtitles")) {
+        conf.subtitles = true;
+        return;
+    }
+    if (key == _T("--no-pgs-sub")) {
+        conf.pgsSub = false;
+        return;
+    }
+    if (key == _T("--pgs-font")) {
+        conf.pgsFontFamily = getParam(argc, argv, i++);
+        return;
+    }
+    if (key == _T("--nicojk")) {
+        nicojk = true;
+        return;
+    }
+    if (key == _T("-m") || key == _T("--muxer")) {
+        conf.muxerPath = pathNormalize(getParam(argc, argv, i++));
+        return;
+    }
+    if (key == _T("-t") || key == _T("--timelineeditor")) {
+        conf.timelineditorPath = pathNormalize(getParam(argc, argv, i++));
+        return;
+    }
+    if (key == _T("--mp4box")) {
+        conf.mp4boxPath = pathNormalize(getParam(argc, argv, i++));
+        return;
+    }
+    if (key == _T("--mkvmerge")) {
+        conf.mkvmergePath = pathNormalize(getParam(argc, argv, i++));
+        return;
+    }
+    if (key == _T("-j") || key == _T("--json")) {
+        conf.outInfoJsonPath = pathNormalize(getParam(argc, argv, i++));
+        return;
+    }
+    if (key == _T("-f") || key == _T("--filter")) {
+        conf.filterScriptPath = pathNormalize(getParam(argc, argv, i++));
+        return;
+    }
+    if (key == _T("-pf") || key == _T("--postfilter")) {
+        conf.postFilterScriptPath = pathNormalize(getParam(argc, argv, i++));
+        return;
+    }
+    if (key == _T("-s") || key == _T("--serviceid") || key == _T("--serivceid")) { // --serivceid は旧来の綴り誤りで互換のために残す
+        tstring sidstr = getParam(argc, argv, i++);
+        if (sidstr.size() > 2 && (sidstr.substr(0, 2) == _T("0x") || sidstr.substr(0, 2) == _T("0X"))) {
+            // 16進
+            conf.serviceId = parseIntOption(key, sidstr.substr(2), 16);
+        } else {
+            // 10進
+            conf.serviceId = parseIntOption(key, sidstr);
+        }
+        return;
+    }
+    if (key == _T("--mpeg2decoder")) {
+        tstring arg = getParam(argc, argv, i++);
+        conf.decoderSetting.mpeg2 = decoderFromString(arg);
+        if (conf.decoderSetting.mpeg2 == DECODER_INVALID) {
+            THROWF(ArgumentException, "--mpeg2decoderの指定が間違っています: %" PRITSTR "", arg);
+        }
+        return;
+    }
+    if (key == _T("--h264decoder")) {
+        tstring arg = getParam(argc, argv, i++);
+        conf.decoderSetting.h264 = decoderFromString(arg);
+        if (conf.decoderSetting.h264 == DECODER_INVALID) {
+            THROWF(ArgumentException, "--h264decoderの指定が間違っています: %" PRITSTR "", arg);
+        }
+        return;
+    }
+    if (key == _T("--hevcdecoder")) {
+        tstring arg = getParam(argc, argv, i++);
+        conf.decoderSetting.hevc = decoderFromString(arg);
+        if (conf.decoderSetting.hevc == DECODER_INVALID) {
+            THROWF(ArgumentException, "--hevcdecoderの指定が間違っています: %" PRITSTR "", arg);
+        }
+        return;
+    }
+    if (key == _T("-eb") || key == _T("--encode-buffer")) {
+        conf.numEncodeBufferFrames = parseIntOption(key, getParam(argc, argv, i++));
+        return;
+    }
+    if (key == _T("--ignore-no-logo")) {
+        conf.ignoreNoLogo = true;
+        return;
+    }
+    if (key == _T("--ignore-no-drcsmap")) {
+        conf.ignoreNoDrcsMap = true;
+        return;
+    }
+    if (key == _T("--ignore-nicojk-error")) {
+        conf.ignoreNicoJKError = true;
+        return;
+    }
+    if (key == _T("--no-logo-in-cm")) {
+        conf.noLogoInCM = true;
+        return;
+    }
+    if (key == _T("--loose-logo-detection")) {
+        conf.looseLogoDetection = true;
+        return;
+    }
+    if (key == _T("--max-fade-length")) {
+        conf.maxFadeLength = parseIntOption(key, getParam(argc, argv, i++));
+        return;
+    }
+    if (key == _T("--no-delogo")) {
+        conf.noDelogo = true;
+        return;
+    }
+    if (key == _T("--parallel-logo-analysis")) {
+        const auto arg = getParam(argc, argv, i++);
+        conf.parallelLogoAnalysis = true;
+        conf.numParallelLogoAnalysis = (arg == _T("auto")) ? 0 : parseIntOption(key, arg);
+        return;
+    }
+    if (key == _T("--direct-logo-analysis")) {
+        conf.directLogoAnalysis = parseIntOption(key, getParam(argc, argv, i++)) != 0;
+        return;
+    }
+    if (key == _T("--auto-logo-detect")) {
+        conf.autoLogoDetect = parseIntOption(key, getParam(argc, argv, i++));
+        return;
+    }
+    if (key == _T("--auto-logo-detect-search-frames")) {
+        conf.autoLogoDetectSearchFrames = parseIntOption(key, getParam(argc, argv, i++));
+        return;
+    }
+    if (key == _T("--auto-logo-detect-div-x")) {
+        conf.autoLogoDetectDivX = parseIntOption(key, getParam(argc, argv, i++));
+        return;
+    }
+    if (key == _T("--auto-logo-detect-div-y")) {
+        conf.autoLogoDetectDivY = parseIntOption(key, getParam(argc, argv, i++));
+        return;
+    }
+    if (key == _T("--auto-logo-detect-block-size")) {
+        conf.autoLogoDetectBlockSize = parseIntOption(key, getParam(argc, argv, i++));
+        return;
+    }
+    if (key == _T("--auto-logo-detect-threshold")) {
+        conf.autoLogoDetectThreshold = parseIntOption(key, getParam(argc, argv, i++));
+        return;
+    }
+    if (key == _T("--auto-logo-detect-margin-x")) {
+        conf.autoLogoDetectMarginX = parseIntOption(key, getParam(argc, argv, i++));
+        return;
+    }
+    if (key == _T("--auto-logo-detect-margin-y")) {
+        conf.autoLogoDetectMarginY = parseIntOption(key, getParam(argc, argv, i++));
+        return;
+    }
+    if (key == _T("--timefactor")) {
+        const auto arg = getParam(argc, argv, i++);
+        int ret = sscanfT(arg.c_str(), _T("%lf"), &conf.x265TimeFactor);
+        if (ret == 0) {
+            THROWF(ArgumentException, "--timefactorの指定が間違っています");
+        }
+        return;
+    }
+    if (key == _T("--logo")) {
+        conf.logoPath.push_back(pathNormalize(getParam(argc, argv, i++)));
+        return;
+    }
+    if (key == _T("--erase-logo")) {
+        conf.eraseLogoPath.push_back(pathNormalize(getParam(argc, argv, i++)));
+        return;
+    }
+    if (key == _T("--drcs")) {
+        auto path = pathNormalize(getParam(argc, argv, i++));
+        conf.drcsMapPath = path;
+        conf.drcsOutPath = pathGetDirectory(path);
+        if (conf.drcsOutPath.size() == 0) {
+            conf.drcsOutPath = _T(".");
+        }
+        return;
+    }
+    if (key == _T("--chapter-exe")) {
+        conf.chapterExePath = pathNormalize(getParam(argc, argv, i++));
+        return;
+    }
+    if (key == _T("--chapter-exe-options")) {
+        conf.chapterExeOptions = getParam(argc, argv, i++);
+        return;
+    }
+    if (key == _T("--jls")) {
+        conf.joinLogoScpPath = pathNormalize(getParam(argc, argv, i++));
+        return;
+    }
+    if (key == _T("--jls-cmd")) {
+        conf.joinLogoScpCmdPath = pathNormalize(getParam(argc, argv, i++));
+        return;
+    }
+    if (key == _T("--jls-option")) {
+        conf.joinLogoScpOptions = getParam(argc, argv, i++);
+        return;
+    }
+    if (key == _T("--tsreadex")) {
+        conf.tsreadexPath = pathNormalize(getParam(argc, argv, i++));
+        return;
+    }
+    if (key == _T("--b24tovtt")) {
+        conf.b24tovttPath = pathNormalize(getParam(argc, argv, i++));
+        return;
+    }
+    if (key == _T("--psisiarc")) {
+        conf.psisiarcPath = pathNormalize(getParam(argc, argv, i++));
+        return;
+    }
+    if (key == _T("--trimavs")) {
+        conf.trimavsPath = pathNormalize(getParam(argc, argv, i++));
+        return;
+    }
+    if (key == _T("--divfile")) {
+        conf.divFilePath = pathNormalize(getParam(argc, argv, i++));
+        return;
+    }
+    if (key == _T("--resume-dir")) {
+        conf.resumeDir = pathNormalize(getParam(argc, argv, i++));
+        return;
+    }
+    if (key == _T("--copy-trimavs")) {
+        conf.copyTrimAVS = true;
+        return;
+    }
+    if (key == _T("--nicoass")) {
+#if defined(_WIN32) || defined(_WIN64)
+        conf.nicoConvAssPath = pathNormalize(getParam(argc, argv, i++));
+        conf.nicoConvAssSpecified = true;
+#else
+        // Linux では旧オプションも nicojk_ass の指定として扱う
+        conf.nicoJKAssPath = pathNormalize(getParam(argc, argv, i++));
+#endif
+        return;
+    }
+    if (key == _T("--nicojk-ref")) {
+        conf.nicoJKSource.ref = pathNormalize(getParam(argc, argv, i++));
+        if (conf.nicoJKSource.ref.empty()) THROW(ArgumentException, "基準録画が空です");
+        conf.nicoJKSource.specified = true;
+        return;
+    }
+    if (key == _T("--nicojk-ref-sid")) {
+        const int sid = parseIntOption(key, getParam(argc, argv, i++));
+        if (sid <= 0 || sid > 65535) THROW(ArgumentException, "基準のサービスIDが不正です");
+        conf.nicoJKSource.refSid = sid;
+        return;
+    }
+    if (key == _T("--nicojk-ref-mode")) {
+        conf.nicoJKSource.refMode = ParseNicoJKRefMode(getParam(argc, argv, i++));
+        return;
+    }
+    if (key == _T("--nicojk-alt")) {
+        conf.nicoJKSource.alt = ParseNicoJKRefMode(getParam(argc, argv, i++));
+        return;
+    }
+    if (key == _T("--nicojk-dump-dir")) {
+        conf.nicoJKSource.dumpDir = pathNormalize(getParam(argc, argv, i++));
+        return;
+    }
+    if (key == _T("--nicojk-file")) {
+        conf.nicoJKSource.file = pathNormalize(getParam(argc, argv, i++));
+        if (conf.nicoJKSource.file.empty()) THROW(ArgumentException, "実況ファイルが空です");
+        conf.nicoJKSource.specified = conf.nicoJKSource.strictFile = true;
+        return;
+    }
+    if (key == _T("--nicojk-channel")) {
+        conf.nicoJKSource.channel = ParseNicoJKChannel(getParam(argc, argv, i++));
+        conf.nicoJKSource.specified = true;
+        return;
+    }
+    if (key == _T("--nicojk-start")) {
+        conf.nicoJKSource.start = ParseNicoJKTime(getParam(argc, argv, i++));
+        conf.nicoJKSource.specified = true;
+        return;
+    }
+    if (key == _T("--nicojk-offset")) {
+        conf.nicoJKSource.offset = ParseNicoJKOffset(getParam(argc, argv, i++));
+        conf.nicoJKSource.specified = true;
+        return;
+    }
+    if (key == _T("--nicojk-program-title")) {
+        conf.nicoJKSource.programTitle = getParam(argc, argv, i++);
+        return;
+    }
+    if (key == _T("--nicojk-program-start")) {
+        conf.nicoJKSource.programStart = ParseNicoJKTime(getParam(argc, argv, i++));
+        return;
+    }
+    if (key == _T("--nicojkass")) {
+        conf.nicoJKAssPath = pathNormalize(getParam(argc, argv, i++));
+        return;
+    }
+    if (key == _T("--webvtt")) {
+        conf.webvtt = true;
+        return;
+    }
+    if (key == _T("--sub-mode")) {
+        const auto arg = getParam(argc, argv, i++);
+        if (arg == _T("arib")) conf.subtitleMode = SUBMODE_ARIB;
+        else if (arg == _T("whisper-fallback")) conf.subtitleMode = SUBMODE_WHISPER_FALLBACK;
+        else if (arg == _T("whisper-always")) conf.subtitleMode = SUBMODE_WHISPER_ALWAYS;
+        else THROWF(ArgumentException, "--sub-modeの指定が間違っています");
+        return;
+    }
+    if (key == _T("--whisper")) {
+        conf.whisperPath = pathNormalize(getParam(argc, argv, i++));
+        return;
+    }
+    if (key == _T("--whisper-model")) {
+        conf.whisperModel = getParam(argc, argv, i++);
+        return;
+    }
+    if (key == _T("--whisper-option")) {
+        conf.whisperOption = getParam(argc, argv, i++);
+        return;
+    }
+    if (key == _T("--whisper-parallel")) {
+        conf.whisperParallel = true;
+        return;
+    }
+    if (key == _T("--nicojklog")) {
+        conf.useNicoJKLog = true;
+        return;
+    }
+    if (key == _T("-om") || key == _T("--cmoutmask")) {
+        conf.cmoutmask = parseIntOption(key, getParam(argc, argv, i++));
+        return;
+    }
+    if (key == _T("--nicojkmask")) {
+        conf.nicojkmask = parseIntOption(key, getParam(argc, argv, i++));
+        return;
+    }
+    if (key == _T("--dump")) {
+        conf.dumpStreamInfo = true;
+        return;
+    }
+    if (key == _T("--systemavsplugin")) {
+        conf.systemAvsPlugin = true;
+        return;
+    }
+    if (key == _T("--no-remove-tmp")) {
+        conf.noRemoveTmp = true;
+        return;
+    }
+    if (key == _T("--dump-filter")) {
+        conf.dumpFilter = true;
+        return;
+    }
+    if (key == _T("--resource-manager")) {
+        const auto arg = getParam(argc, argv, i++);
+#if defined(_WIN32) || defined(_WIN64)
+        size_t inPipe, outPipe;
+        int ret = sscanfT(arg.c_str(), _T("%zu:%zu"), &inPipe, &outPipe);
+#else
+        int inPipe, outPipe;
+        int ret = sscanfT(arg.c_str(), _T("%d:%d"), &inPipe, &outPipe);
+#endif
+        if (ret < 2) {
+            THROWF(ArgumentException, "--resource-managerの指定が間違っています");
+        }
+        conf.inPipe = (pipe_handle_t)inPipe;
+        conf.outPipe = (pipe_handle_t)outPipe;
+        return;
+    }
+    if (key == _T("--affinity")) {
+        const auto arg = getParam(argc, argv, i++);
+        int ret = sscanfT(arg.c_str(), _T("%d:%lld"), &conf.affinityGroup, &conf.affinityMask);
+        if (ret < 2) {
+            THROWF(ArgumentException, "--affinityの指定が間違っています");
+        }
+        return;
+    }
+    if (key == _T("--max-frames")) {
+        conf.maxframes = parseIntOption(key, getParam(argc, argv, i++));
+        return;
+    }
+    if (key == _T("--pmt-cut")) {
+        const auto arg = getParam(argc, argv, i++);
+        int ret = sscanfT(arg.c_str(), _T("%lf:%lf"),
+            &conf.pmtCutSideRate[0], &conf.pmtCutSideRate[1]);
+        if (ret < 2) {
+            THROWF(ArgumentException, "--pmt-cutの指定が間違っています");
+        }
+        return;
+    }
+    if (key == _T("--print-prefix")) {
+        const auto arg = getParam(argc, argv, i++);
+        if (arg == _T("default")) {
+            conf.printPrefix = AMT_PREFIX_DEFAULT;
+        } else if (arg == _T("time")) {
+            conf.printPrefix = AMT_PREFIX_TIME;
+        } else {
+            THROWF(ArgumentException, "--print-prefixの指定が間違っています");
+        }
+        return;
+    }
+    if (key == _T("--exclusive-bat-exec")) {
+        conf.exclusiveBatExec = true;
+        return;
+    }
+    if (key == _T("--pre-enc-bat")) {
+        conf.preEncBatchFile = pathNormalize(getParam(argc, argv, i++));
+        return;
+    }
+    if (key.empty()) {
+        return;
+    }
+    THROWF(FormatException, "不明なオプション: %s", key.c_str());
+}
+
 static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const tchar* argv[]) {
 #if defined(_WIN32) || defined(_WIN64)
     tstring exeAppendix = _T(".exe");
@@ -353,398 +990,7 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
     conf.noLogoInCM = false;
 
     for (int i = 1; i < argc; i++) {
-        tstring key = argv[i];
-        if (key == _T("--loadv2")) {
-            ; // skip
-        } else if (key == _T("-i") || key == _T("--input")) {
-            conf.srcFilePath = pathNormalize(getParam(argc, argv, i++));
-        } else if (key == _T("--original-input-file")) {
-            conf.srcFilePathOrg = pathNormalize(getParam(argc, argv, i++));
-        } else if (key == _T("-o") || key == _T("--output")) {
-            conf.outVideoPath =
-                pathRemoveExtension(pathNormalize(getParam(argc, argv, i++)));
-        } else if (key == _T("--mode")) {
-            conf.mode = getParam(argc, argv, i++);
-        } else if (key == _T("-a") || key == _T("--args")) {
-            conf.modeArgs = getParam(argc, argv, i++);
-        } else if (key == _T("-w") || key == _T("--work")) {
-            conf.workDir = pathNormalize(getParam(argc, argv, i++));
-            if (conf.workDir.size() == 0) {
-                conf.workDir = _T("./");
-            }
-        } else if (key == _T("-et") || key == _T("--encoder-type")) {
-            tstring arg = getParam(argc, argv, i++);
-            conf.encoder = encoderFtomString(arg);
-            if (conf.encoder == ENCODER_INVALID) {
-                THROWF(ArgumentException, "--encoder-typeの指定が間違っています: %" PRITSTR "", arg);
-            }
-        } else if (key == _T("-e") || key == _T("--encoder")) {
-            conf.encoderPath = pathNormalize(getParam(argc, argv, i++));
-        } else if (key == _T("-eo") || key == _T("--encoder-option")) {
-            conf.encoderOptions = getParam(argc, argv, i++);
-        } else if (key == _T("-eft") || key == _T("--encoder-filter-type")) {
-            tstring arg = getParam(argc, argv, i++);
-            conf.encoderFilter = encoderFtomString(arg);
-            if (conf.encoderFilter == ENCODER_INVALID) {
-                THROWF(ArgumentException, "--encoder-filter-typeの指定が間違っています: %" PRITSTR "", arg);
-            }
-        } else if (key == _T("-ef") || key == _T("--encoder-filter")) {
-            conf.encoderFilterPath = pathNormalize(getParam(argc, argv, i++));
-        } else if (key == _T("-efo") || key == _T("--encoder-filter-option")) {
-            conf.encoderFilterOptions = getParam(argc, argv, i++);
-        } else if (key == _T("-efd") || key == _T("--encoder-filter-deint")) {
-            conf.encoderFilterDeinterlace = true;
-        } else if (key == _T("--muxer-add-encoder-cmd")) {
-            conf.muxerAddEncoderCmd = true;
-        } else if (key == _T("--sar-in-container-only")) {
-            conf.sarInContainerOnly = true;
-        } else if (key == _T("--enc-parallel")) {
-            const auto arg = getParam(argc, argv, i++);
-            int parallel = parseIntOption(key, arg);
-            if (parallel < 1) {
-                THROWF(ArgumentException, "--enc-parallelには1以上の値を指定してください");
-            }
-            conf.encoderParallel = parallel;
-        } else if (key == _T("--min-output-duration")) {
-            conf.minOutputDuration = parseIntOption(key, getParam(argc, argv, i++));
-        } else if (key == _T("--sar")) {
-            const auto arg = getParam(argc, argv, i++);
-            int ret = sscanfT(arg.c_str(), _T("%d:%d"), &conf.userSAR.first, &conf.userSAR.second);
-            if (ret < 2) {
-                THROWF(ArgumentException, "--sarの指定が間違っています");
-            }
-        } else if (key == _T("-aet") || key == _T("--audio-encoder-type")) {
-            tstring arg = getParam(argc, argv, i++);
-            conf.audioEncoder = audioEncoderFtomString(arg);
-            if (conf.audioEncoder == AUDIO_ENCODER_INVALID) {
-                THROWF(ArgumentException, "--audio-encoder-typeの指定が間違っています: %" PRITSTR "", arg);
-            }
-        } else if (key == _T("--ignore-video-display-changes")) {
-            conf.ignoreVideoDisplayChanges = true;
-        } else if (key == _T("--audio-format-change")) {
-            const tstring arg = getParam(argc, argv, i++);
-            if (arg == _T("split")) {
-                conf.audioFormatChangeMode = AFC_SPLIT;
-            } else if (arg == _T("merge")) {
-                conf.audioFormatChangeMode = AFC_MERGE;
-            } else if (arg == _T("separate")) {
-                conf.audioFormatChangeMode = AFC_SEPARATE;
-            } else {
-                THROW(ArgumentException, "--audio-format-changeにはsplit、merge、separateを指定してください");
-            }
-        } else if (key == _T("-ae") || key == _T("--audio-encoder")) {
-            conf.audioEncoderPath = pathNormalize(getParam(argc, argv, i++));
-        } else if (key == _T("-aeo") || key == _T("--audio-encoder-option")) {
-            conf.audioEncoderOptions = getParam(argc, argv, i++);
-        } else if (key == _T("-ab") || key == _T("--audio-bitrate")) {
-            conf.audioBitrateInKbps = parseIntOption(key, getParam(argc, argv, i++));
-        } else if (key == _T("-b") || key == _T("--bitrate")) {
-            const auto arg = getParam(argc, argv, i++);
-            int ret = sscanfT(arg.c_str(), _T("%lf:%lf:%lf:%lf"),
-                &conf.bitrate.a, &conf.bitrate.b, &conf.bitrate.h264, &conf.bitrate.h265);
-            if (ret < 3) {
-                THROWF(ArgumentException, "--bitrateの指定が間違っています");
-            }
-            if (ret <= 3) {
-                conf.bitrate.h265 = 2;
-            }
-            conf.autoBitrate = true;
-        } else if (key == _T("-bcm") || key == _T("--bitrate-cm")) {
-            const auto arg = getParam(argc, argv, i++);
-            int ret = sscanfT(arg.c_str(), _T("%lf"), &conf.bitrateCM);
-            if (ret == 0) {
-                THROWF(ArgumentException, "--bitrate-cmの指定が間違っています");
-            }
-        } else if (key == _T("--cm-quality-offset")) {
-            const auto arg = getParam(argc, argv, i++);
-            int ret = sscanfT(arg.c_str(), _T("%lf"), &conf.cmQualityOffset);
-            if (ret == 0) {
-                THROWF(ArgumentException, "--cm-quality-offsetの指定が間違っています");
-            }
-        } else if (key == _T("--cm-cut-offset")) {
-            conf.cmCutOffsetFrames = parseIntOption(key, getParam(argc, argv, i++));
-            if (conf.cmCutOffsetFrames <= 0) {
-                THROWF(ArgumentException, "--cm-cut-offsetには正のフレーム数を指定してください");
-            }
-        } else if (key == _T("--2pass")) {
-            conf.twoPass = true;
-        } else if (key == _T("--splitsub")) {
-            conf.splitSub = true;
-        } else if (key == _T("-fmt") || key == _T("--format")) {
-            const auto arg = getParam(argc, argv, i++);
-            if (arg == _T("mp4")) {
-                conf.format = FORMAT_MP4;
-            } else if (arg == _T("mkv")) {
-                conf.format = FORMAT_MKV;
-            } else if (arg == _T("m2ts")) {
-                conf.format = FORMAT_M2TS;
-            } else if (arg == _T("ts")) {
-                conf.format = FORMAT_TS;
-            } else if (arg == _T("tsreplace")) {
-                conf.format = FORMAT_TSREPLACE;
-            } else {
-                THROWF(ArgumentException, "--formatの指定が間違っています: %" PRITSTR "", arg);
-            }
-        } else if (key == _T("--tsreplace-remove-typed")) {
-            conf.tsreplaceRemoveTypeD = true;
-        } else if (key == _T("--tsreplace-startup-preroll")) {
-            conf.tsreplaceStartupPreroll = parseIntOption(key, getParam(argc, argv, i++));
-        } else if (key == _T("--mux-ts-temp")) {
-            conf.muxTsTemp = true;
-        } else if (key == _T("--use-mkv-when-sub-exists")) {
-            conf.useMKVWhenSubExist = true;
-        } else if (key == _T("--mpeg2-partial")) {
-            conf.mpeg2Partial = true;
-        } else if (key == _T("--chapter")) {
-            conf.chapter = true;
-        } else if (key == _T("--output-chapter")) {
-            conf.outputChapter = true;
-        } else if (key == _T("--subtitles")) {
-            conf.subtitles = true;
-        } else if (key == _T("--no-pgs-sub")) {
-            conf.pgsSub = false;
-        } else if (key == _T("--pgs-font")) {
-            conf.pgsFontFamily = getParam(argc, argv, i++);
-        } else if (key == _T("--nicojk")) {
-            nicojk = true;
-        } else if (key == _T("-m") || key == _T("--muxer")) {
-            conf.muxerPath = pathNormalize(getParam(argc, argv, i++));
-        } else if (key == _T("-t") || key == _T("--timelineeditor")) {
-            conf.timelineditorPath = pathNormalize(getParam(argc, argv, i++));
-        } else if (key == _T("--mp4box")) {
-            conf.mp4boxPath = pathNormalize(getParam(argc, argv, i++));
-        } else if (key == _T("--mkvmerge")) {
-            conf.mkvmergePath = pathNormalize(getParam(argc, argv, i++));
-        } else if (key == _T("-j") || key == _T("--json")) {
-            conf.outInfoJsonPath = pathNormalize(getParam(argc, argv, i++));
-        } else if (key == _T("-f") || key == _T("--filter")) {
-            conf.filterScriptPath = pathNormalize(getParam(argc, argv, i++));
-        } else if (key == _T("-pf") || key == _T("--postfilter")) {
-            conf.postFilterScriptPath = pathNormalize(getParam(argc, argv, i++));
-        } else if (key == _T("-s") || key == _T("--serviceid") || key == _T("--serivceid")) { // --serivceid は旧来の綴り誤りで互換のために残す
-            tstring sidstr = getParam(argc, argv, i++);
-            if (sidstr.size() > 2 && (sidstr.substr(0, 2) == _T("0x") || sidstr.substr(0, 2) == _T("0X"))) {
-                // 16進
-                conf.serviceId = parseIntOption(key, sidstr.substr(2), 16);
-            } else {
-                // 10進
-                conf.serviceId = parseIntOption(key, sidstr);
-            }
-        } else if (key == _T("--mpeg2decoder")) {
-            tstring arg = getParam(argc, argv, i++);
-            conf.decoderSetting.mpeg2 = decoderFromString(arg);
-            if (conf.decoderSetting.mpeg2 == DECODER_INVALID) {
-                THROWF(ArgumentException, "--mpeg2decoderの指定が間違っています: %" PRITSTR "", arg);
-            }
-        } else if (key == _T("--h264decoder")) {
-            tstring arg = getParam(argc, argv, i++);
-            conf.decoderSetting.h264 = decoderFromString(arg);
-            if (conf.decoderSetting.h264 == DECODER_INVALID) {
-                THROWF(ArgumentException, "--h264decoderの指定が間違っています: %" PRITSTR "", arg);
-            }
-        } else if (key == _T("--hevcdecoder")) {
-            tstring arg = getParam(argc, argv, i++);
-            conf.decoderSetting.hevc = decoderFromString(arg);
-            if (conf.decoderSetting.hevc == DECODER_INVALID) {
-                THROWF(ArgumentException, "--hevcdecoderの指定が間違っています: %" PRITSTR "", arg);
-            }
-        } else if (key == _T("-eb") || key == _T("--encode-buffer")) {
-            conf.numEncodeBufferFrames = parseIntOption(key, getParam(argc, argv, i++));
-        } else if (key == _T("--ignore-no-logo")) {
-            conf.ignoreNoLogo = true;
-        } else if (key == _T("--ignore-no-drcsmap")) {
-            conf.ignoreNoDrcsMap = true;
-        } else if (key == _T("--ignore-nicojk-error")) {
-            conf.ignoreNicoJKError = true;
-        } else if (key == _T("--no-logo-in-cm")) {
-            conf.noLogoInCM = true;
-        } else if (key == _T("--loose-logo-detection")) {
-            conf.looseLogoDetection = true;
-        } else if (key == _T("--max-fade-length")) {
-            conf.maxFadeLength = parseIntOption(key, getParam(argc, argv, i++));
-        } else if (key == _T("--no-delogo")) {
-            conf.noDelogo = true;
-        } else if (key == _T("--parallel-logo-analysis")) {
-            const auto arg = getParam(argc, argv, i++);
-            conf.parallelLogoAnalysis = true;
-            conf.numParallelLogoAnalysis = (arg == _T("auto")) ? 0 : parseIntOption(key, arg);
-        } else if (key == _T("--direct-logo-analysis")) {
-            conf.directLogoAnalysis = parseIntOption(key, getParam(argc, argv, i++)) != 0;
-        } else if (key == _T("--auto-logo-detect")) {
-            conf.autoLogoDetect = parseIntOption(key, getParam(argc, argv, i++));
-        } else if (key == _T("--auto-logo-detect-search-frames")) {
-            conf.autoLogoDetectSearchFrames = parseIntOption(key, getParam(argc, argv, i++));
-        } else if (key == _T("--auto-logo-detect-div-x")) {
-            conf.autoLogoDetectDivX = parseIntOption(key, getParam(argc, argv, i++));
-        } else if (key == _T("--auto-logo-detect-div-y")) {
-            conf.autoLogoDetectDivY = parseIntOption(key, getParam(argc, argv, i++));
-        } else if (key == _T("--auto-logo-detect-block-size")) {
-            conf.autoLogoDetectBlockSize = parseIntOption(key, getParam(argc, argv, i++));
-        } else if (key == _T("--auto-logo-detect-threshold")) {
-            conf.autoLogoDetectThreshold = parseIntOption(key, getParam(argc, argv, i++));
-        } else if (key == _T("--auto-logo-detect-margin-x")) {
-            conf.autoLogoDetectMarginX = parseIntOption(key, getParam(argc, argv, i++));
-        } else if (key == _T("--auto-logo-detect-margin-y")) {
-            conf.autoLogoDetectMarginY = parseIntOption(key, getParam(argc, argv, i++));
-        } else if (key == _T("--timefactor")) {
-            const auto arg = getParam(argc, argv, i++);
-            int ret = sscanfT(arg.c_str(), _T("%lf"), &conf.x265TimeFactor);
-            if (ret == 0) {
-                THROWF(ArgumentException, "--timefactorの指定が間違っています");
-            }
-        } else if (key == _T("--logo")) {
-            conf.logoPath.push_back(pathNormalize(getParam(argc, argv, i++)));
-        } else if (key == _T("--erase-logo")) {
-            conf.eraseLogoPath.push_back(pathNormalize(getParam(argc, argv, i++)));
-        } else if (key == _T("--drcs")) {
-            auto path = pathNormalize(getParam(argc, argv, i++));
-            conf.drcsMapPath = path;
-            conf.drcsOutPath = pathGetDirectory(path);
-            if (conf.drcsOutPath.size() == 0) {
-                conf.drcsOutPath = _T(".");
-            }
-        } else if (key == _T("--chapter-exe")) {
-            conf.chapterExePath = pathNormalize(getParam(argc, argv, i++));
-        } else if (key == _T("--chapter-exe-options")) {
-            conf.chapterExeOptions = getParam(argc, argv, i++);
-        } else if (key == _T("--jls")) {
-            conf.joinLogoScpPath = pathNormalize(getParam(argc, argv, i++));
-        } else if (key == _T("--jls-cmd")) {
-            conf.joinLogoScpCmdPath = pathNormalize(getParam(argc, argv, i++));
-        } else if (key == _T("--jls-option")) {
-            conf.joinLogoScpOptions = getParam(argc, argv, i++);
-        } else if (key == _T("--tsreadex")) {
-            conf.tsreadexPath = pathNormalize(getParam(argc, argv, i++));
-        } else if (key == _T("--b24tovtt")) {
-            conf.b24tovttPath = pathNormalize(getParam(argc, argv, i++));
-        } else if (key == _T("--psisiarc")) {
-            conf.psisiarcPath = pathNormalize(getParam(argc, argv, i++));
-        } else if (key == _T("--trimavs")) {
-            conf.trimavsPath = pathNormalize(getParam(argc, argv, i++));
-        } else if (key == _T("--divfile")) {
-            conf.divFilePath = pathNormalize(getParam(argc, argv, i++));
-        } else if (key == _T("--resume-dir")) {
-            conf.resumeDir = pathNormalize(getParam(argc, argv, i++));
-        } else if (key == _T("--copy-trimavs")) {
-            conf.copyTrimAVS = true;
-        } else if (key == _T("--nicoass")) {
-#if defined(_WIN32) || defined(_WIN64)
-            conf.nicoConvAssPath = pathNormalize(getParam(argc, argv, i++));
-            conf.nicoConvAssSpecified = true;
-#else
-            // Linux では旧オプションも nicojk_ass の指定として扱う
-            conf.nicoJKAssPath = pathNormalize(getParam(argc, argv, i++));
-#endif
-        } else if (key == _T("--nicojk-ref")) {
-            conf.nicoJKSource.ref = pathNormalize(getParam(argc, argv, i++));
-            if (conf.nicoJKSource.ref.empty()) THROW(ArgumentException, "基準録画が空です");
-            conf.nicoJKSource.specified = true;
-        } else if (key == _T("--nicojk-ref-sid")) {
-            const int sid = parseIntOption(key, getParam(argc, argv, i++));
-            if (sid <= 0 || sid > 65535) THROW(ArgumentException, "基準のサービスIDが不正です");
-            conf.nicoJKSource.refSid = sid;
-        } else if (key == _T("--nicojk-ref-mode")) {
-            conf.nicoJKSource.refMode = ParseNicoJKRefMode(getParam(argc, argv, i++));
-        } else if (key == _T("--nicojk-alt")) {
-            conf.nicoJKSource.alt = ParseNicoJKRefMode(getParam(argc, argv, i++));
-        } else if (key == _T("--nicojk-dump-dir")) {
-            conf.nicoJKSource.dumpDir = pathNormalize(getParam(argc, argv, i++));
-        } else if (key == _T("--nicojk-file")) {
-            conf.nicoJKSource.file = pathNormalize(getParam(argc, argv, i++));
-            if (conf.nicoJKSource.file.empty()) THROW(ArgumentException, "実況ファイルが空です");
-            conf.nicoJKSource.specified = conf.nicoJKSource.strictFile = true;
-        } else if (key == _T("--nicojk-channel")) {
-            conf.nicoJKSource.channel = ParseNicoJKChannel(getParam(argc, argv, i++));
-            conf.nicoJKSource.specified = true;
-        } else if (key == _T("--nicojk-start")) {
-            conf.nicoJKSource.start = ParseNicoJKTime(getParam(argc, argv, i++));
-            conf.nicoJKSource.specified = true;
-        } else if (key == _T("--nicojk-offset")) {
-            conf.nicoJKSource.offset = ParseNicoJKOffset(getParam(argc, argv, i++));
-            conf.nicoJKSource.specified = true;
-        } else if (key == _T("--nicojk-program-title")) {
-            conf.nicoJKSource.programTitle = getParam(argc, argv, i++);
-        } else if (key == _T("--nicojk-program-start")) {
-            conf.nicoJKSource.programStart = ParseNicoJKTime(getParam(argc, argv, i++));
-        } else if (key == _T("--nicojkass")) {
-            conf.nicoJKAssPath = pathNormalize(getParam(argc, argv, i++));
-        } else if (key == _T("--webvtt")) {
-            conf.webvtt = true;
-        } else if (key == _T("--sub-mode")) {
-            const auto arg = getParam(argc, argv, i++);
-            if (arg == _T("arib")) conf.subtitleMode = SUBMODE_ARIB;
-            else if (arg == _T("whisper-fallback")) conf.subtitleMode = SUBMODE_WHISPER_FALLBACK;
-            else if (arg == _T("whisper-always")) conf.subtitleMode = SUBMODE_WHISPER_ALWAYS;
-            else THROWF(ArgumentException, "--sub-modeの指定が間違っています");
-        } else if (key == _T("--whisper")) {
-            conf.whisperPath = pathNormalize(getParam(argc, argv, i++));
-        } else if (key == _T("--whisper-model")) {
-            conf.whisperModel = getParam(argc, argv, i++);
-        } else if (key == _T("--whisper-option")) {
-            conf.whisperOption = getParam(argc, argv, i++);
-        } else if (key == _T("--whisper-parallel")) {
-            conf.whisperParallel = true;
-        } else if (key == _T("--nicojklog")) {
-            conf.useNicoJKLog = true;
-        } else if (key == _T("-om") || key == _T("--cmoutmask")) {
-            conf.cmoutmask = parseIntOption(key, getParam(argc, argv, i++));
-        } else if (key == _T("--nicojkmask")) {
-            conf.nicojkmask = parseIntOption(key, getParam(argc, argv, i++));
-        } else if (key == _T("--dump")) {
-            conf.dumpStreamInfo = true;
-        } else if (key == _T("--systemavsplugin")) {
-            conf.systemAvsPlugin = true;
-        } else if (key == _T("--no-remove-tmp")) {
-            conf.noRemoveTmp = true;
-        } else if (key == _T("--dump-filter")) {
-            conf.dumpFilter = true;
-        } else if (key == _T("--resource-manager")) {
-            const auto arg = getParam(argc, argv, i++);
-#if defined(_WIN32) || defined(_WIN64)
-            size_t inPipe, outPipe;
-            int ret = sscanfT(arg.c_str(), _T("%zu:%zu"), &inPipe, &outPipe);
-#else
-            int inPipe, outPipe;
-            int ret = sscanfT(arg.c_str(), _T("%d:%d"), &inPipe, &outPipe);
-#endif
-            if (ret < 2) {
-                THROWF(ArgumentException, "--resource-managerの指定が間違っています");
-            }
-            conf.inPipe = (pipe_handle_t)inPipe;
-            conf.outPipe = (pipe_handle_t)outPipe;
-        } else if (key == _T("--affinity")) {
-            const auto arg = getParam(argc, argv, i++);
-            int ret = sscanfT(arg.c_str(), _T("%d:%lld"), &conf.affinityGroup, &conf.affinityMask);
-            if (ret < 2) {
-                THROWF(ArgumentException, "--affinityの指定が間違っています");
-            }
-        } else if (key == _T("--max-frames")) {
-            conf.maxframes = parseIntOption(key, getParam(argc, argv, i++));
-        } else if (key == _T("--pmt-cut")) {
-            const auto arg = getParam(argc, argv, i++);
-            int ret = sscanfT(arg.c_str(), _T("%lf:%lf"),
-                &conf.pmtCutSideRate[0], &conf.pmtCutSideRate[1]);
-            if (ret < 2) {
-                THROWF(ArgumentException, "--pmt-cutの指定が間違っています");
-            }
-        } else if (key == _T("--print-prefix")) {
-            const auto arg = getParam(argc, argv, i++);
-            if (arg == _T("default")) {
-                conf.printPrefix = AMT_PREFIX_DEFAULT;
-            } else if (arg == _T("time")) {
-                conf.printPrefix = AMT_PREFIX_TIME;
-            } else {
-                THROWF(ArgumentException, "--print-prefixの指定が間違っています");
-            }
-        } else if (key == _T("--exclusive-bat-exec")) {
-            conf.exclusiveBatExec = true;
-        } else if (key == _T("--pre-enc-bat")) {
-            conf.preEncBatchFile = pathNormalize(getParam(argc, argv, i++));
-        } else if (key.size() == 0) {
-            continue;
-        } else {
-            THROWF(FormatException, "不明なオプション: %s", key.c_str());
-        }
+        parseOneOption(argc, argv, i, conf, nicojk);
     }
 
     ValidateNicoJKReference(conf.nicoJKSource);
