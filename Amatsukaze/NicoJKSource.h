@@ -16,9 +16,18 @@ struct NicoJKSourceSpec {
     tstring dumpDir;
     std::optional<int> channel;
     std::optional<double> start, programStart, offset;
+    tstring programTitle;
     bool specified = false;
     bool strictFile = false;
 };
+inline tstring MakeNicoJKProgramTitleArgument(const tstring& altMode, tstring title) {
+    if (altMode.empty() || title.empty()) return {};
+    // 手動でCLIを呼ぶ場合も、番組名が子プロセスの引数の区切りを壊さないようにする。
+    for (auto& ch : title) {
+        if (ch == _T('"') || ch == _T('\\')) ch = _T(' ');
+    }
+    return _T(" --program-title=\"") + title + _T("\"");
+}
 inline double ParseNicoJKOffset(const tstring& value) {
     try {
         size_t pos = 0;
@@ -127,6 +136,7 @@ inline NicoJKSourceSpec MergeNicoJKSource(const NicoJKSourceSpec& cli, NicoJKSou
     if (!cli.alt.empty()) base.alt = cli.alt;
     if (!cli.dumpDir.empty()) base.dumpDir = cli.dumpDir;
     base.programStart = cli.programStart;
+    base.programTitle = cli.programTitle;
     base.specified = base.specified || cli.specified || !base.ref.empty();
     ValidateNicoJKReference(base);
     return base;

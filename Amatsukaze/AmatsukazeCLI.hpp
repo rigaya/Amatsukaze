@@ -159,6 +159,7 @@ static void printHelp(const tchar* bin) {
         "  --nicojk-start <時刻> コメント基準(UNIX秒/ISO8601/JST14桁)\n"
         "  --nicojk-offset <秒> 正の値でコメントを遅らせる\n"
         "  --nicojk-program-start <時刻> 録画番組開始時刻\n"
+        "  --nicojk-program-title <番組名> 録画番組名(--nicojk-altで時刻から特定できない場合に使う)\n"
         "  --nicojklog         ニコニコ実況コメントをNicoJKログフォルダから取得\n"
         "                      (NicoConvASSを -nicojk 1 で呼び出します)\n"
         "  --nicojkmask <数値> ニコニコ実況コメントマスク[1]\n"
@@ -661,6 +662,8 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
         } else if (key == _T("--nicojk-offset")) {
             conf.nicoJKSource.offset = ParseNicoJKOffset(getParam(argc, argv, i++));
             conf.nicoJKSource.specified = true;
+        } else if (key == _T("--nicojk-program-title")) {
+            conf.nicoJKSource.programTitle = getParam(argc, argv, i++);
         } else if (key == _T("--nicojk-program-start")) {
             conf.nicoJKSource.programStart = ParseNicoJKTime(getParam(argc, argv, i++));
         } else if (key == _T("--nicojkass")) {
@@ -959,6 +962,7 @@ extern "C" AMATSUKAZE_API int ParseCommandLineForTest(int argc, const tchar* con
         add(_T("nicojk_ref_mode"), source.refMode.empty() ? _T("merge") : source.refMode);
         add(_T("nicojk_ref_sid"), source.refSid ? StringFormat(_T("%d"), *source.refSid) : _T(""));
         add(_T("nicojk_alt"), source.alt);
+        add(_T("nicojk_program_title"), source.programTitle);
         add(_T("nicojk_dump_dir"), source.dumpDir);
         add(_T("nicojk_channel"), source.channel ? StringFormat(_T("%d"), *source.channel) : _T(""));
         add(_T("nicojk_start"), source.start ? StringFormat(_T("%.6f"), *source.start) : _T(""));

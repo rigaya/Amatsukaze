@@ -27,7 +27,7 @@ public class NicoJKProgramStartTests
         Assert.NotEmpty(EncodeServer.GetNicoJKProgramStartArgument(true, new DateTime(2000, 1, 1, 0, 0, 1)));
     }
 
-    private static string MakeNicoJKArguments(ProfileSetting profile, string nicoJKAlt, string nicoJKAssPath = "nicojk_ass.py")
+    private static string MakeNicoJKArguments(ProfileSetting profile, string? nicoJKAlt, string nicoJKAssPath = "nicojk_ass.py", string? programTitle = null)
     {
         // 起動処理を省き、引数生成に必要な設定だけを与える。
         var server = (EncodeServer)System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(EncodeServer));
@@ -38,7 +38,7 @@ public class NicoJKProgramStartTests
             src: "input.ts", srcOrg: null, dst: "output.mkv", json: "result.json", streamFormat: VideoStreamFormat.MPEG2,
             serviceId: 3088, logofiles: null, ignoreNoLogo: true, jlscommand: null, jlsopt: null, ceopt: null,
             trimavs: null, divfile: null, resumeDir: null, batDir: "bat", inHandle: null, outHandle: null, pid: 0,
-            programStart: new DateTime(2026, 10, 11, 1, 0, 0), nicoJKAlt: nicoJKAlt);
+            programStart: new DateTime(2026, 10, 11, 1, 0, 0), nicoJKAlt: nicoJKAlt, programTitle: programTitle);
     }
 
     private static ProfileSetting MakeNicoJKProfile(bool enable) => new ProfileSetting
@@ -63,7 +63,7 @@ public class NicoJKProgramStartTests
     [Fact]
     public void 実況を無効にしたプロファイルでは実況関連のCLI引数を出さない()
     {
-        var arguments = MakeNicoJKArguments(MakeNicoJKProfile(false), "merge");
+        var arguments = MakeNicoJKArguments(MakeNicoJKProfile(false), "merge", programTitle: "作品 #53");
         Assert.DoesNotContain("nicojk", arguments);
         Assert.DoesNotContain(" --nicoass", arguments);
     }
@@ -76,6 +76,17 @@ public class NicoJKProgramStartTests
         var arguments = MakeNicoJKArguments(MakeNicoJKProfile(true), mode);
         Assert.Contains(" --nicojk-alt " + mode, arguments);
         Assert.Contains(" --nicojkass ", arguments);
+    }
+
+    [Theory]
+    [InlineData("merge", "作品 \"副題\"\\ #53", " --nicojk-program-title \"作品  副題   #53\"")]
+    [InlineData("replace", "", null)]
+    [InlineData(null, "作品 #53", null)]
+    public void 別放送の指定があるときだけ番組名を安全に渡す(string? mode, string title, string? expected)
+    {
+        var arguments = MakeNicoJKArguments(MakeNicoJKProfile(true), mode, programTitle: title);
+        if (expected == null) Assert.DoesNotContain("--nicojk-program-title", arguments);
+        else Assert.Contains(expected, arguments);
     }
 
     [Theory]

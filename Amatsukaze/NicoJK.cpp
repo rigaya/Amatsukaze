@@ -494,6 +494,7 @@ tstring NicoJK::MakeNicoJKScriptArgs(const tstring& pythonCommand,
         if (source_.start) args += StringFormat(_T(" --comments-start %.6f"), *source_.start);
         if (source_.offset) args += StringFormat(_T(" --comments-offset %.6f"), *source_.offset);
     }
+    args += MakeNicoJKProgramTitleArgument(altMode_, source_.programTitle);
     // 基準
     if (!altMode_.empty()) {
         // 録画の探索はnicojk_assが行う。入力ファイル自身は除く。

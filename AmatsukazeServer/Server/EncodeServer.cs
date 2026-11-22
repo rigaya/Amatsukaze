@@ -2082,7 +2082,7 @@ namespace Amatsukaze.Server
         // 実況の変換ツールの引数。WindowsでNicoConvASSを設定していればNicoConvASSを使う。
         // 別放送のコメントはnicojk_assだけが対応するので、使う設定ならNicoConvASSのときもnicojk_assを渡す
         // (CLIは、通常の取得をNicoConvASSで行い、別放送のコメントにnicojk_assを使う。手動の指定の有無はCLIが見る)。
-        internal static string GetNicoJKToolArguments(bool isWindows, string nicoConvAssPath, string nicoJKAssPath, string nicoJKAlt)
+        internal static string GetNicoJKToolArguments(bool isWindows, string nicoConvAssPath, string nicoJKAssPath, string nicoJKAlt, string programTitle = null)
         {
             var useNicoConvAss = isWindows && !string.IsNullOrEmpty(nicoConvAssPath);
             var useAlt = !string.IsNullOrEmpty(nicoJKAlt) && (!useNicoConvAss || !string.IsNullOrEmpty(nicoJKAssPath));
@@ -2090,6 +2090,11 @@ namespace Amatsukaze.Server
             if (useAlt)
             {
                 sb.Append(" --nicojk-alt ").Append(nicoJKAlt);
+                if (!string.IsNullOrEmpty(programTitle))
+                {
+                    sb.Append(" --nicojk-program-title \"")
+                        .Append(programTitle.Replace('"', ' ').Replace('\\', ' ')).Append('"');
+                }
             }
             if (useNicoConvAss)
             {
@@ -2120,7 +2125,7 @@ namespace Amatsukaze.Server
             VideoStreamFormat streamFormat,
             int serviceId, string[] logofiles,
             bool ignoreNoLogo, string jlscommand, string jlsopt, string ceopt, string trimavs, string divfile, string resumeDir, string batDir,
-            string inHandle, string outHandle, int pid, DateTime programStart = default, string nicoJKAlt = null)
+            string inHandle, string outHandle, int pid, DateTime programStart = default, string nicoJKAlt = null, string programTitle = null)
         {
             if ((mode != ProcMode.CMCheck && mode != ProcMode.TrimAdjust) && mode != ProcMode.DrcsCheck && profile != null)
             {
@@ -2394,7 +2399,7 @@ namespace Amatsukaze.Server
                         sb.Append(" --nicojkmask ")
                             .Append(profile.NicoJKFormatMask);
                         sb.Append(GetNicoJKToolArguments(!Util.IsServerLinux(),
-                            setting.NicoConvASSPath, setting.NicoJKAssPath, nicoJKAlt));
+                            setting.NicoConvASSPath, setting.NicoJKAssPath, nicoJKAlt, programTitle));
                     }
 
                     if(profile.FilterOption == FilterOption.Setting)

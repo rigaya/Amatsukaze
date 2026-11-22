@@ -1559,7 +1559,7 @@ bool TestCommandLineArguments(tstring& diagnostic) {
     // 値が欠けた末尾のオプションと、数値でない値
     for (const TCHAR* option : { _T("-i"), _T("-o"), _T("-s"), _T("-e"), _T("--mode"), _T("--logo"),
         _T("--nicojk-file"), _T("--nicojk-channel"), _T("--nicojk-start"),
-        _T("--nicojk-program-start"), _T("--nicojk-offset"), _T("--nicojk-ref"),
+        _T("--nicojk-program-start"), _T("--nicojk-program-title"), _T("--nicojk-offset"), _T("--nicojk-ref"),
         _T("--nicojk-ref-sid"), _T("--nicojk-ref-mode"), _T("--nicojk-alt"), _T("--nicojk-dump-dir") }) {
         if (!ExpectCommandLineStatus({ _T("-i"), _T("a.ts"), _T("-o"), _T("b.mp4"), option }, 1,
             strsprintf(_T("値が欠けた末尾の %s"), option).c_str(), diagnostic)) return false;
@@ -1663,8 +1663,9 @@ bool TestCommandLineArguments(tstring& diagnostic) {
     }
     // 先行放送のコメントは既定で空。replace/mergeだけを受け付ける。
     if (!ExpectCommandLine(with({}), { { _T("nicojk_alt"), _T("") } }, _T("先行放送のコメントは既定で無効"), diagnostic)) return false;
-    if (!ExpectCommandLine(with({ _T("--nicojk-alt"), _T("merge") }), { { _T("nicojk_alt"), _T("merge") } },
-        _T("先行放送のコメントの指定"), diagnostic)) return false;
+    if (!ExpectCommandLine(with({ _T("--nicojk-alt"), _T("merge"), _T("--nicojk-program-title"), _T("作品 ＃５３") }),
+        { { _T("nicojk_alt"), _T("merge") }, { _T("nicojk_program_title"), _T("作品 ＃５３") } },
+        _T("先行放送のコメントと番組名の指定"), diagnostic)) return false;
     for (const TCHAR* mode : { _T(""), _T("unknown"), _T("Merge") }) {
         if (!ExpectCommandLineStatus(with({ _T("--nicojk-alt"), mode }),
             1, _T("先行放送のコメントの未知のモードを拒否"), diagnostic)) return false;
@@ -1741,8 +1742,17 @@ bool TestNicoJKSource(tstring& diagnostic) {
     if (!Expect(emptyIni.specified, _T("空の指定ファイルも取得元指定に含める"), diagnostic)) return false;
     NicoJKSourceSpec programOnly;
     programOnly.programStart = 2000;
-    if (!Expect(!MergeNicoJKSource(programOnly, {}).specified,
-        _T("番組開始の補助情報だけでは新経路に切り替えない"), diagnostic)) return false;
+    programOnly.programTitle = _T("作品 \"副題\"\\ ＃５３");
+    const auto program = MergeNicoJKSource(programOnly, {});
+    if (!Expect(!program.specified && program.programTitle == programOnly.programTitle,
+        _T("番組の補助情報を保持し、それだけでは新経路に切り替えない"), diagnostic)) return false;
+    const auto titleArgs = SplitCommandLine(_T("nicojk_ass make")
+        + MakeNicoJKProgramTitleArgument(_T("merge"), program.programTitle));
+    if (!Expect(titleArgs.size() == 3 && titleArgs[2] == _T("--program-title=作品  副題   ＃５３"),
+        _T("子プロセスに番組名を単一の値として渡す"), diagnostic)) return false;
+    if (!Expect(MakeNicoJKProgramTitleArgument(_T(""), program.programTitle).empty()
+        && MakeNicoJKProgramTitleArgument(_T("merge"), _T("")).empty(),
+        _T("別放送の指定または番組名がなければ子プロセスに渡さない"), diagnostic)) return false;
     // refとref-modeをiniから読み、CLIで指定した項目だけを上書きする。
     const auto refIni = ParseNicoJKIni({ "ref=original.ts", "ref-mode=merge", "file=reference.xml" });
     if (!Expect(refIni.ref == _T("original.ts") && refIni.refMode == _T("merge") &&
