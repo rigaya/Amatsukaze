@@ -226,6 +226,13 @@
     font-weight: 600;
 }
 
+.fa-badge-fetching {
+    top: auto;
+    left: auto;
+    right: 8px;
+    bottom: 8px;
+}
+
 .fa-overlay {
     position: absolute;
     inset: 0;

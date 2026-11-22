@@ -18,11 +18,11 @@ public partial class FilterAdjust
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
     private double _encoderSeconds;
-    private double? _encoderDurationSeconds, _encoderSeekInput;
+    private double? _encoderDurationSeconds;
     private bool _hasEncoderView;
     private string? _encoderBoundary;
     private string EncoderDisplayMode => _view == "compare" ? "sideBySide" : _view;
-    private string EncoderSeekValue => FormatSeconds(_encoderSeekInput ?? _encoderSeconds);
+    private string EncoderSeekValue => FormatSeconds(_encoderSeconds);
     private static string FormatSeconds(double seconds) => seconds.ToString("0.######", CultureInfo.InvariantCulture);
     private bool CanStep(int direction) => CanOperate && (IsEncoder
         ? Ready && _encoderBoundary != (direction < 0 ? "start" : "end")
@@ -36,16 +36,14 @@ public partial class FilterAdjust
     private Task SeekEncoderAsync(ChangeEventArgs args, string phase)
     {
         if (!CanOperate || !double.TryParse(args.Value?.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var seconds)
-            || !double.IsFinite(seconds) || seconds < 0) return Task.CompletedTask;
-        _encoderSeekInput = phase == "drag" || !Ready ? seconds : null;
-        return StartEncoderViewAsync(new("seek", seconds, phase));
+            || !double.IsFinite(seconds) || seconds < 0 || seconds >= TimeSpan.MaxValue.TotalSeconds) return Task.CompletedTask;
+        _encoderSeconds = Math.Min(seconds, _encoderDurationSeconds ?? seconds);
+        return StartEncoderViewAsync(new("seek", _encoderSeconds, phase));
     }
 
     private async Task RestoreEncoderPresentationAsync()
     {
-        var seek = new EncoderOperation("seek", _encoderSeekInput ?? _encoderSeconds, "commit");
-        _encoderSeekInput = null;
-        var operation = StartEncoderViewAsync(seek);
+        var operation = StartEncoderViewAsync(new("seek", _encoderSeconds, "commit"));
         long revision = _frameRevision;
         await operation;
         if (Ready && _frameRevision == revision && _error == null && _view != _displayedView)
@@ -62,7 +60,6 @@ public partial class FilterAdjust
     private Task StartEncoderViewAsync(EncoderOperation action)
     {
         if (!Ready || !IsEncoder) return Task.CompletedTask;
-        if (action.Op != "seek") _encoderSeekInput = null;
         _frameCancellation?.Cancel();
         var cancellation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token, _sessionCancellation.Token);
         _frameCancellation = cancellation;
@@ -78,6 +75,7 @@ public partial class FilterAdjust
             if (action.Op != "snapshot") _encoderBoundary = null;
             _status = "フレームを取得中…";
             _error = null;
+            StateHasChanged();
             await InvalidateImagesAsync();
             if (!Current()) return;
             var options = CaptureFrameOptions();
@@ -155,11 +153,7 @@ public partial class FilterAdjust
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
         catch (Exception ex) { if (Current()) ShowError(ex); }
-        finally
-        {
-            if (ReferenceEquals(_frameCancellation, cancellation)) _frameCancellation = null;
-            cancellation.Dispose();
-        }
+        finally { FinishFrameRequest(cancellation); }
     }
 
     private sealed record EncoderView(double CurrentSeconds, double? DurationSeconds, string DisplayMode, EncoderViewFrame[] Frames);

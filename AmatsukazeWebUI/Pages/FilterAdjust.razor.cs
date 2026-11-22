@@ -45,6 +45,7 @@ public partial class FilterAdjust
     private int MaxFrame => Math.Max(0, _frames - 1);
     private bool CanOperate => !_disposed && !_expired && _sessionId != null && (IsEncoder ? _width > 0 : _frames > 0);
     private bool _busy => _reopening || _configurationCancellation != null || _frameCancellation != null || _seeking;
+    private bool _fetchingFrame => _frameCancellation is { IsCancellationRequested: false };
     private bool Ready => CanOperate && _generation == _committedGeneration;
     private string SessionUrl => $"{Root}/{_sessionId}";
     private string FilterKind => Node(_profile, "FilterOption")?.ToString() ?? "None";
@@ -306,6 +307,13 @@ public partial class FilterAdjust
         _frameCancellation = cancellation;
         return TrackAsync(RenderFramesAsync(_generation, ++_frameRevision, step, seek, cancellation));
     }
+    private void FinishFrameRequest(CancellationTokenSource cancellation)
+    {
+        bool ownsRequest = ReferenceEquals(_frameCancellation, cancellation);
+        if (ownsRequest) _frameCancellation = null;
+        cancellation.Dispose();
+        if (ownsRequest && !_disposed) StateHasChanged();
+    }
     private async Task RenderFramesAsync(long gen, long revision, int? step, int? seek, CancellationTokenSource cancellation)
     {
         var token = cancellation.Token;
@@ -313,10 +321,11 @@ public partial class FilterAdjust
         try
         {
             if (!Current()) return;
-            await InvalidateImagesAsync();
-            if (!Current()) return;
             _status = "フレームを取得中…";
             _error = null;
+            StateHasChanged();
+            await InvalidateImagesAsync();
+            if (!Current()) return;
             var pos = seek ?? _position;
             var view = _view;
             var options = CaptureFrameOptions();
@@ -360,7 +369,7 @@ public partial class FilterAdjust
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
         catch (Exception ex) { if (Current()) ShowError(ex); }
-        finally { if (ReferenceEquals(_frameCancellation, cancellation)) _frameCancellation = null; cancellation.Dispose(); }
+        finally { FinishFrameRequest(cancellation); }
     }
     private sealed record FrameOptions(int Scale, string Format, int[]? Crop, bool Decimate);
     private sealed record PreviewFrame(byte[] Data, Dictionary<string, string> Metadata, string? Mime, int Position)

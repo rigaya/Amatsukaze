@@ -79,6 +79,10 @@
                 {
                     <div class="fa-badge fa-badge-drop">間引かれるフレーム</div>
                 }
+                @if (_fetchingFrame)
+                {
+                    <span class="fa-badge fa-badge-fetching" aria-hidden="true">取得中</span>
+                }
                 @if (_profile == null)
                 {
                     <div class="fa-overlay">
