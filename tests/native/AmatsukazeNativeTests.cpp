@@ -1,5 +1,6 @@
 ﻿// Amatsukaze の公開ネイティブ単体テスト実行器
 #include "AMTLogo.h"
+#include "AMTSourceDat.h"
 #include "LogoScan.h"
 #include "LogoScanPartition.h"
 #include "LogoResidualWeight.h"
@@ -66,6 +67,70 @@ bool Expect(bool condition, const TCHAR* message, tstring& diagnostic) {
     if (condition) return true;
     diagnostic = message;
     return false;
+}
+
+template<typename T>
+void FillBytes(T& value, size_t first, size_t last, unsigned char fill) {
+    auto bytes = reinterpret_cast<unsigned char*>(&value);
+    std::fill(bytes + first, bytes + last, fill);
+}
+
+bool TestSourceDatSerialization(tstring& diagnostic) {
+    const tstring videoPath = _T("素材/i0.mpg");
+    const tstring audioPath = _T("素材/audio.wav");
+    VideoFormat video{ VS_MPEG2, 1920, 1080, 1440, 1080, 4, 3, 30000, 1001,
+        1, 6, 9, false, true, 0x48, 20000, 112 };
+    const AudioFormat audio{ AUDIO_STEREO, 48000 };
+    // 512件単位の書き出しで、2つ目のブロックの値と要素数も確認する。
+    std::vector<FilterSourceFrame> frames(513, { true, 7, 9009.0, 3003.0, 9000, 9009, 67890, 2, CMTYPE_NONCM });
+    frames.back().frameIndex = 8;
+    std::vector<FilterAudioFrame> audioFrames{ { 37, 49000, 2048 }, { 38, 51048, 2048 } };
+    DecoderSetting decoder{};
+    decoder.mpeg2 = DECODER_QSV;
+    decoder.h264 = DECODER_CUVID;
+    const std::vector<uint8_t> primary{ 1, 0 };
+
+    const auto setPadding = [&](unsigned char fill) {
+        FillBytes(video, offsetof(VideoFormat, mpeg2ProfileAndLevelIndication) + sizeof(uint8_t),
+            offsetof(VideoFormat, mpeg2BitRateValue), fill);
+        for (auto& frame : frames) {
+            FillBytes(frame, offsetof(FilterSourceFrame, halfDelay) + sizeof(bool),
+                offsetof(FilterSourceFrame, frameIndex), fill);
+        }
+        for (auto& frame : audioFrames) {
+            FillBytes(frame, offsetof(FilterAudioFrame, frameIndex) + sizeof(int),
+                offsetof(FilterAudioFrame, waveOffset), fill);
+            FillBytes(frame, offsetof(FilterAudioFrame, waveLength) + sizeof(int), sizeof(frame), fill);
+        }
+    };
+
+    // 従来のレイアウトを、paddingだけ明示的に0にして参照データにする。
+    setPadding(0);
+    std::string expected;
+    const auto appendValue = [&](const auto& value) {
+        expected.append(reinterpret_cast<const char*>(&value), sizeof(value));
+    };
+    const auto appendArray = [&](const auto& values) {
+        appendValue(static_cast<int64_t>(values.size()));
+        for (const auto& value : values) appendValue(value);
+    };
+    appendArray(videoPath);
+    appendArray(audioPath);
+    appendValue(video);
+    appendValue(audio);
+    appendArray(frames);
+    appendArray(audioFrames);
+    appendValue(decoder);
+    appendValue(trimadjust::AUDIO_PRIMARY_METADATA_MAGIC);
+    appendArray(primary);
+
+    // 意図的にpaddingを汚し、保存後の.datに渡らないことを確認する。
+    setPadding(0xa5);
+    std::string actual;
+    amt_source_dat::WriteMetadata([&](const uint8_t* data, size_t size) {
+        actual.append(reinterpret_cast<const char*>(data), size);
+    }, videoPath, audioPath, video, audio, frames, audioFrames, decoder, primary);
+    return Expect(actual == expected, _T("プレビュー素材の保存形式または未使用バイトが不正です"), diagnostic);
 }
 
 bool ExpectNear(double actual, double expected, double tolerance, const TCHAR* name, tstring& diagnostic) {
@@ -4430,6 +4495,7 @@ constexpr TestCase TEST_CASES[] = {
     { _T("audio_channel_conversion"), TestAudioChannelConversion },
     { _T("subprocess_start_order"), TestSubProcessStart },
     { _T("command_line_arguments"), TestCommandLineArguments },
+    { _T("source_dat_serialization"), TestSourceDatSerialization },
     { _T("command_line_executable_search"), TestCommandLineExecutableSearch },
     { _T("nicojk_source"), TestNicoJKSource },
     { _T("cm_cut_offset"), TestCMCutOffset },

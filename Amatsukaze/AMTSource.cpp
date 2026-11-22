@@ -7,7 +7,7 @@
 */
 
 #include "AMTSource.h"
-#include "TrimAdjustAudio.h"
+#include "AMTSourceDat.h"
 #include "RGYPoolAV.h"
 #include <string>
 #include <cstdint>
@@ -844,18 +844,9 @@ void SaveAMTSource(
     const DecoderSetting& decoderSetting,
     const std::vector<uint8_t>& primaryAudioFrames) {
     File file(savepath, _T("wb"));
-    file.writeArray(std::vector<tchar>(srcpath.begin(), srcpath.end()));
-    file.writeArray(std::vector<tchar>(audiopath.begin(), audiopath.end()));
-    file.writeValue(vfmt);
-    file.writeValue(afmt);
-    file.writeArray(frames);
-    file.writeArray(audioFrames);
-    file.writeValue(decoderSetting);
-    // 既存読込経路は末尾を無視するため、従来のdat形式との互換性を保つ。
-    if (!primaryAudioFrames.empty()) {
-        file.writeValue<uint32_t>(trimadjust::AUDIO_PRIMARY_METADATA_MAGIC);
-        file.writeArray(primaryAudioFrames);
-    }
+    amt_source_dat::WriteMetadata([&](const uint8_t* data, size_t size) {
+        file.write(MemoryChunk(const_cast<uint8_t*>(data), size));
+    }, srcpath, audiopath, vfmt, afmt, frames, audioFrames, decoderSetting, primaryAudioFrames);
 }
 
 static std::unique_ptr<AMTSource> LoadAMTSourceInstance(AMTContext& ctx,
