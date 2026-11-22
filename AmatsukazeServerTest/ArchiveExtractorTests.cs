@@ -512,6 +512,13 @@ public sealed class ArchiveExtractorTests
 
         private static string FindExtractor()
         {
+            var configured = Environment.GetEnvironmentVariable("AMT_TEST_7ZIP");
+            if (!string.IsNullOrEmpty(configured))
+            {
+                if (Path.IsPathFullyQualified(configured) && File.Exists(configured)) return configured;
+                throw new InvalidOperationException($"AMT_TEST_7ZIPには存在する展開器の絶対パスを指定してください。指定値 {configured}");
+            }
+
             var executable = OperatingSystem.IsWindows() ? "7za.exe" : "7zzs";
             var searched = new HashSet<string>(OperatingSystem.IsWindows()
                 ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
@@ -528,8 +535,11 @@ public sealed class ArchiveExtractorTests
                     }
                 }
             }
-            throw new InvalidOperationException("テスト用の展開器がありません。対象のexe_files/7zに配置してください。探索先: " +
-                string.Join(", ", searched));
+            var setup = OperatingSystem.IsWindows()
+                ? @"Windowsではリポジトリ直下で powershell.exe -NoProfile -File .\scripts\test-csharp-windows.ps1 を実行してください。"
+                : "対象のexe_files/7zに7zzsを配置してください。取得手順は.github/workflows/native_tests.ymlのC# Offlineを参照してください。";
+            throw new InvalidOperationException("テスト用の展開器がありません。" + setup +
+                " 探索先 " + string.Join(", ", searched));
         }
 
         private static void Run(string fileName, IEnumerable<string> arguments,

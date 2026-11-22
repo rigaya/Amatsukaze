@@ -180,6 +180,16 @@ dotnet build AmatsukazeGUI/AmatsukazeGUI.csproj -p:EnableWindowsTargeting=true
 - 実行はできない。バインドパス等の実行時に解決される部分は検証されないので、動作確認はWindows実機で行うこと。
 - WPF側のコードを変更した場合は、コミット前にこれを通すこと。
 
+## WindowsのC#標準試験
+
+リポジトリ直下から実行する。展開器はLinuxのCIと同じ版を取得し、SHA-256照合後に試験用の一時ディレクトリへ置く。準備に失敗した場合は試験を開始する前にエラーで終了する。
+
+```powershell
+powershell.exe -NoProfile -File .\scripts\test-csharp-windows.ps1
+```
+
+Release構成は`-Configuration Release`を付ける。TRXとハングダンプは既定で`build/csharp-test-results`配下の今回の実行専用ディレクトリに保存する。
+
 ## 試験の作成方針
 
 試験(`tests/native/`、`AmatsukazeServerTest/`、非公開の`cli_itest`)を書く・直す・レビューするときに守ること。2026-11に、実時間の期限、ホスト環境、並列実行に結果が左右される試験をまとめて直した。その原因と決まりをここにまとめる。

@@ -121,10 +121,6 @@ jobs:
   csharp_offline:
     name: C# Offline
     runs-on: ubuntu-latest
-    env:
-      SEVENZIP_VER: 26.02
-      SEVENZIP_PKG: 7z2602
-      SEVENZIP_ARCHIVE_SHA256: 41aaba7b1235304ab5aa0624530c67ae829496cd29e875925271efdccc28c03e
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -136,12 +132,13 @@ jobs:
           dotnet-version: 10.0.x
       - name: Set up release 7-Zip
         run: |
+          source scripts/test-7zip.conf
           archive="${RUNNER_TEMP}/${SEVENZIP_PKG}-linux-x64.tar.xz"
           destination="${GITHUB_WORKSPACE}/../build/exe_files/7z"
           curl -fL --retry 3 --retry-delay 10 \
             "https://github.com/ip7z/7zip/releases/download/${SEVENZIP_VER}/${SEVENZIP_PKG}-linux-x64.tar.xz" \
             -o "${archive}"
-          printf '%s  %s\n' "${SEVENZIP_ARCHIVE_SHA256}" "${archive}" | sha256sum -c -
+          printf '%s  %s\n' "${SEVENZIP_LINUX_SHA256}" "${archive}" | sha256sum -c -
           mkdir -p "${destination}"
           tar -xf "${archive}" -C "${destination}" 7zzs License.txt
           chmod 755 "${destination}/7zzs"
