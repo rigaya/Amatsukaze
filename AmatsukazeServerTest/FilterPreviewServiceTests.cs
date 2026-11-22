@@ -23,7 +23,7 @@ public class FilterPreviewServiceTests
     {
         await using var fixture = new RestFileSystemFixture();
         var executable = Path.Combine(fixture.Root, "fake-engine");
-        File.WriteAllText(executable, "#!/bin/sh\nprintf 'AMTPREVIEW READY version=2\\n'\nread line\nprintf 'AMTPREVIEW INFO gen=1 frames=4\\n'\nread line\nprintf 'AMTPREVIEW FRAME id=1 gen=1 pos=0 format=jpeg width=2 height=2 bytes=4 pitches=2,1,1\\nABCD'\nread line\nprintf 'AMTPREVIEW ERROR id=0 gen=2 message=failed\\n'\nread line\n");
+        File.WriteAllText(executable, "#!/bin/sh\nprintf 'AMTPREVIEW READY version=2\\n'\nread -r line\nprintf '%s\\n' \"$line\" > \"$0.config\"\nprintf 'AMTPREVIEW INFO gen=1 frames=4\\n'\nread line\nprintf 'AMTPREVIEW FRAME id=1 gen=1 pos=0 format=jpeg width=2 height=2 bytes=4 pitches=2,1,1\\nABCD'\nread -r line\nprintf '%s\\n' \"$line\" >> \"$0.config\"\nprintf 'AMTPREVIEW ERROR id=0 gen=2 message=failed\\n'\nread line\n");
         File.SetUnixFileMode(executable, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         fixture.Data.setting.FilterPreviewEnginePath = executable;
         await fixture.Api.Queue.Store.OnCommonData(new CommonData { Setting = fixture.Data.setting });
@@ -52,7 +52,7 @@ public class FilterPreviewServiceTests
         var frame = await service.FrameAsync(id, new FilterPreviewFrameRequest { Gen = 1, Pos = 0, Format = "jpeg" }, CancellationToken.None);
         var cached = await service.FrameAsync(id, new FilterPreviewFrameRequest { Gen = 1, Pos = 0, Format = "jpeg" }, CancellationToken.None);
         var customError = await Record.ExceptionAsync(() => service.ConfigureAsync(id, new FilterPreviewConfigRequest { Gen = 2, FilterOption = FilterOption.Custom }, CancellationToken.None));
-        var engineError = await Record.ExceptionAsync(() => service.ConfigureAsync(id, new FilterPreviewConfigRequest { Gen = 2, FilterOption = FilterOption.Setting, FilterSetting = new FilterSetting { EnableResize = true } }, CancellationToken.None));
+        var engineError = await Record.ExceptionAsync(() => service.ConfigureAsync(id, new FilterPreviewConfigRequest { Gen = 2, FilterOption = FilterOption.Setting, FilterSetting = new FilterSetting { EnableDeinterlace = true, DeinterlaceAlgorithm = DeinterlaceAlgorithm.Yadif } }, CancellationToken.None));
         var after = await service.GetConfigurationAsync(id, CancellationToken.None);
         var preserved = await service.GetEditedProfileAsync(id, CancellationToken.None, true);
         var selected = await service.GetEditedProfileAsync(id, CancellationToken.None);
@@ -66,6 +66,14 @@ public class FilterPreviewServiceTests
         Assert.Equal("フィルタ確認.ts", sourceName);
         Assert.Equal(0, initial.Gen);
         Assert.Equal("4", configured.Metadata["frames"]);
+        var commands = File.ReadAllLines(executable + ".config");
+        Assert.Equal(2, commands.Length);
+        using var firstConfig = System.Text.Json.JsonDocument.Parse(commands[0]);
+        Assert.Equal("tff", firstConfig.RootElement.GetProperty("interlace").GetString());
+        Assert.Equal("tff", firstConfig.RootElement.GetProperty("afterInterlace").GetString());
+        using var secondConfig = System.Text.Json.JsonDocument.Parse(commands[1]);
+        Assert.Equal("tff", secondConfig.RootElement.GetProperty("interlace").GetString());
+        Assert.Equal("progressive", secondConfig.RootElement.GetProperty("afterInterlace").GetString());
         Assert.Equal("ABCD", Encoding.ASCII.GetString(frame.Data));
         Assert.Equal("ABCD", Encoding.ASCII.GetString(cached.Data));
         Assert.IsType<ArgumentException>(customError);
