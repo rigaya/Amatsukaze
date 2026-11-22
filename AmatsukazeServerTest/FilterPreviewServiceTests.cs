@@ -1,5 +1,4 @@
 using System;
-using System.Globalization;
 using System.IO;
 using System.Runtime.Versioning;
 using System.Text;
@@ -17,9 +16,12 @@ public class FilterPreviewServiceTests
 {
     [LinuxTheory]
     [SupportedOSPlatform("linux")]
-    [InlineData(FilterOption.None)]
-    [InlineData(FilterOption.Custom)]
-    public async Task 偽エンジンでセッションの設定取得とフレーム取得を行う(FilterOption originalOption)
+    [InlineData(FilterOption.None, ProcMode.Batch, null)]
+    [InlineData(FilterOption.Custom, ProcMode.Batch, null)]
+    [InlineData(FilterOption.None, ProcMode.FilterAdjust, CheckType.CM)]
+    [InlineData(FilterOption.None, ProcMode.FilterAdjust, CheckType.TS)]
+    public async Task 偽エンジンでセッションの設定取得とフレーム取得を行う(
+        FilterOption originalOption, ProcMode mode, CheckType? logType)
     {
         await using var fixture = new RestFileSystemFixture();
         var executable = Path.Combine(fixture.Root, "fake-engine");
@@ -31,10 +33,12 @@ public class FilterPreviewServiceTests
         Directory.CreateDirectory(temp);
         File.WriteAllBytes(Path.Combine(temp, "amts0.dat"), new byte[] { 0 });
         var start = new DateTime(2026, 1, 2, 3, 4, 5);
-        var logs = Path.Combine(fixture.Root, "data", "logs");
-        Directory.CreateDirectory(logs);
-        File.WriteAllText(Path.Combine(logs, start.ToString("yyyy-MM-dd_HHmmss.fff", CultureInfo.InvariantCulture) + ".txt"), "一時フォルダ: " + temp, Util.AmatsukazeDefaultEncoding);
+        var server = fixture.Api.Queue.Server;
+        var log = (logType.HasValue ? server.GetCheckLogFileBase(start) : server.GetLogFileBase(start)) + ".txt";
+        Directory.CreateDirectory(Path.GetDirectoryName(log)!);
+        File.WriteAllText(log, "一時フォルダ: " + temp, Util.AmatsukazeDefaultEncoding);
         var item = RestQueueTestFixture.Item(123, QueueState.Complete);
+        item.Mode = mode;
         item.SrcPath = @"C:\録画\フィルタ確認.ts";
         item.EncodeStart = start;
         item.Profile = ServerSupport.NormalizeProfile(null!);
@@ -42,6 +46,16 @@ public class FilterPreviewServiceTests
         item.Profile.FilterOption = originalOption;
         item.Profile.FilterPath = "カスタム.avs";
         await fixture.Api.Queue.Seed(item);
+        if (logType is { } type)
+        {
+            await fixture.Api.Queue.Store.OnUIData(new UIData
+            {
+                CheckLogData = new CheckLogData
+                {
+                    Items = [new CheckLogItem { Type = type, SrcPath = item.SrcPath, CheckStartDate = start, Success = true }],
+                },
+            });
+        }
         var timing = new FilterPreviewEngineTiming(new FakeTimeProvider(), Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
         using var service = new FilterPreviewService(fixture.Api.Queue.Store,
             _ => new FilterPreviewSourceFormat { Progressive = 0, SarWidth = 4, SarHeight = 3, ColorSpace = 1 }, timing);

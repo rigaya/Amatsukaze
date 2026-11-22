@@ -1603,6 +1603,7 @@ namespace Amatsukaze.Server.Rest
             {
                 sb.Append(item.Id).Append('|')
                   .Append(item.State).Append('|')
+                  .Append(item.Mode).Append('|')
                   .Append(GetStateLabel(item)).Append('|')
                   .Append(item.FileName ?? "").Append('|')
                   .Append(item.ServiceName ?? "").Append('|')

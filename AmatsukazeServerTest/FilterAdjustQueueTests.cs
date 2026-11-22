@@ -18,6 +18,10 @@ public sealed class FilterAdjustQueueTests
         item.Profile = ServerSupport.NormalizeProfile(null!);
         fixture.Data.services.ServiceMap[item.ServiceId] = new ServiceSettingElement { LogoSettings = new List<LogoSetting>() };
         await fixture.Api.Queue.Seed(item);
+        // 本物のワーカーを起動せず、キュー追加通知の受け手を接続する。
+        var server = fixture.Api.Queue.Server;
+        var scheduled = (ScheduledQueue)RestQueueTestFixture.GetField(server, "scheduledQueue");
+        scheduled.WorkerPool = (WorkerPool)RestQueueTestFixture.GetField(server, "workerPool");
 
         Assert.True(fixture.Api.Queue.Manager.UpdateQueueItem(item, null));
         Assert.Equal(QueueState.Queue, item.State);
