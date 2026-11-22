@@ -135,6 +135,31 @@ public sealed class RestStateStoreTests
     }
 
     [Fact]
+    public async Task 新規のフィルタ調整が次の取得前に完了しても連続した通知を返す()
+    {
+        var store = new RestStateStore(null!);
+        var before = store.GetQueueView(null!);
+        var item = RestQueueTestFixture.Item(1, QueueState.Queue);
+        item.Mode = ProcMode.FilterAdjust;
+        await Update(store, UpdateType.Add, item);
+        item.State = QueueState.Complete;
+        await Update(store, UpdateType.Update, item);
+        var delta = store.GetQueueChanges(before.Version);
+        Assert.False(delta.FullSyncRequired);
+        Assert.Collection(delta.Changes,
+            change =>
+            {
+                Assert.Equal(Amatsukaze.Shared.QueueChangeType.Add, change.Type);
+                Assert.False(change.Item!.CanFilterAdjust);
+            },
+            change =>
+            {
+                Assert.Equal(Amatsukaze.Shared.QueueChangeType.Update, change.Type);
+                Assert.True(change.Item!.CanFilterAdjust);
+            });
+    }
+
+    [Fact]
     public async Task キューの追加更新移動削除と全同期後の差分を返す()
     {
         var store = new RestStateStore(null!);

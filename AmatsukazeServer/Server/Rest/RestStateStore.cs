@@ -500,7 +500,8 @@ namespace Amatsukaze.Server.Rest
                 }
 
                 var minVersion = queueChanges[0].Version;
-                if (sinceVersion < minVersion)
+                // 直前のバージョンからは保持中の先頭イベントを引き継げる。
+                if (sinceVersion < minVersion - 1)
                 {
                     return new Amatsukaze.Shared.QueueChangesView()
                     {

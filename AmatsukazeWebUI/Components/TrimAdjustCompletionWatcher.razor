@@ -19,6 +19,7 @@
         var token = cancellation.Token;
         try
         {
+            await InvokeAsync(UpdateAsync);
             using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
             while (await timer.WaitForNextTickAsync(token))
             {
