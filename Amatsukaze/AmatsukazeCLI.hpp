@@ -179,6 +179,7 @@ static void printHelp(const tchar* bin) {
         "  --mode <モード>     処理モード[ts]\n"
         "                      ts : MPGE2-TSを入力する通常エンコードモード\n"
         "                      cm : エンコードまで行わず、CM解析までで終了するモード\n"
+        "                      ts_analyze : TS解析とプレビュー用素材の保存までで終了するモード\n"
         "                      drcs : マッピングのないDRCS外字画像だけ出力するモード\n"
         "                      probe_subtitles : 字幕があるか判定\n"
         "                      probe_audio : 音声フォーマットを出力\n"
@@ -996,17 +997,22 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
         parseOneOption(argc, argv, i, conf, nicojk);
     }
 
+    const bool tsAnalyzeOnly = conf.mode == TS_ANALYZE_MODE;
+    if (tsAnalyzeOnly) {
+        conf.noRemoveTmp = true;
+    }
+
     ValidateNicoJKReference(conf.nicoJKSource);
     if (!nicojk) {
         conf.nicojkmask = 0;
     }
 
-    if (conf.encoder == ENCODER_X262
+    if (!tsAnalyzeOnly && conf.encoder == ENCODER_X262
         && conf.format != FORMAT_MKV && conf.format != FORMAT_TSREPLACE) {
         THROW(ArgumentException, "x262はMKVまたはTS (replace)出力でのみ使用できます");
     }
 
-    if (conf.mpeg2Partial) {
+    if (!tsAnalyzeOnly && conf.mpeg2Partial) {
         if (conf.encoder != ENCODER_X262 || conf.format != FORMAT_TSREPLACE) {
             THROW(ArgumentException, "--mpeg2-partialにはx262とTS (replace)出力が必要です");
         }
@@ -1060,20 +1066,20 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
         }
     }
 
-    if (conf.mode == _T("drcs") || conf.mode == _T("cm") || starts_with(conf.mode, _T("probe_"))) {
+    if (tsAnalyzeOnly || conf.mode == _T("drcs") || conf.mode == _T("cm") || starts_with(conf.mode, _T("probe_"))) {
         if (conf.srcFilePath.size() == 0) {
             THROWF(ArgumentException, "入力ファイルを指定してください");
         }
     }
 
-    if (conf.chapter && !conf.ignoreNoLogo && (!conf.noLogoInCM || !conf.noDelogo)) {
+    if (!tsAnalyzeOnly && conf.chapter && !conf.ignoreNoLogo && (!conf.noLogoInCM || !conf.noDelogo)) {
         if (conf.logoPath.size() == 0) {
             THROW(ArgumentException, "ロゴが指定されていません");
         }
     }
 
     // CM解析は４つ揃える必要がある
-    if (conf.chapterExePath.size() > 0 || conf.joinLogoScpPath.size() > 0) {
+    if (!tsAnalyzeOnly && (conf.chapterExePath.size() > 0 || conf.joinLogoScpPath.size() > 0)) {
         if (conf.chapterExePath.size() == 0) {
             THROW(ArgumentException, "chapter_exe.exeへのパスが設定されていません");
         }
@@ -1098,7 +1104,7 @@ static std::unique_ptr<ConfigWrapper> parseArgs(AMTContext& ctx, int argc, const
     }
 
     // exeを探す
-    if (conf.mode != _T("drcs") && !starts_with(conf.mode, _T("probe_"))) {
+    if (!tsAnalyzeOnly && conf.mode != _T("drcs") && !starts_with(conf.mode, _T("probe_"))) {
         auto search = [resolveExecutable](const tstring& path) {
             return pathNormalize(resolveExecutable(path));
         };
@@ -1290,13 +1296,13 @@ int NicoJKWavMain(AMTContext& ctx, const ConfigWrapper& setting);
 static int amatsukazeTranscodeMain(AMTContext& ctx, const ConfigWrapper& setting) {
     try {
 
-        if (setting.isSubtitlesEnabled()) {
+        if (!setting.isTsAnalyzeOnly() && setting.isSubtitlesEnabled()) {
             // DRCSマッピングをロード
             ctx.loadDRCSMapping(setting.getDRCSMapPath());
         }
 
         tstring mode = setting.getMode();
-        if (mode == _T("ts") || mode == _T("cm"))
+        if (mode == _T("ts") || setting.isAnalysisOnly())
             transcodeMain(ctx, setting);
         else if (mode == _T("g"))
             transcodeSimpleMain(ctx, setting);

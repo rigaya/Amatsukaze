@@ -1534,6 +1534,15 @@ bool TestCommandLineArguments(tstring& diagnostic) {
         { _T("enc_parallel"), _T("1") }, { _T("min_output_duration"), _T("5") }, { _T("max_frames"), _T("9000") },
         { _T("nicojk_mask"), _T("0") }, { _T("dump"), _T("0") }, { _T("json"), _T("") }, { _T("sar_x"), _T("0") }, { _T("sar_y"), _T("0") },
     }, _T("最小構成の既定値"), diagnostic)) return false;
+    if (!ExpectCommandLine({ _T("--mode"), _T("ts_analyze"), _T("-i"), _T("a.ts"), _T("--chapter"),
+        _T("--chapter-exe"), _T("missing-chapter"), _T("--jls"), _T("") }, {
+        { _T("mode"), _T("ts_analyze") }, { _T("src"), _T("a.ts") }, { _T("out_base"), _T("") },
+        { _T("no_remove_tmp"), _T("1") },
+    }, _T("TS解析専用モードは出力やロゴを要求せず一時ファイルを残す"), diagnostic)) return false;
+    if (!ExpectCommandLineStatus({ _T("--mode"), _T("ts_analyze") }, 1,
+        _T("TS解析専用モードは入力が必要"), diagnostic)) return false;
+    if (!ExpectCommandLineStatus({ _T("--mode"), _T("ts"), _T("-i"), _T("a.ts") }, 1,
+        _T("通常のTSエンコードは出力が必要"), diagnostic)) return false;
     // チャンネル表は両経路で絶対パスにする。Windows既定のPython経路は空のまま。
     CommandLineResult defaultNicoJKPaths;
     if (!Expect(ParseCommandLine({ _T("-i"), _T("a.ts"), _T("-o"), _T("b.mp4") }, defaultNicoJKPaths) == 0,

@@ -208,6 +208,8 @@ const char* GetCMSuffix(CMType cmtype);
 
 const char* GetNicoJKSuffix(NicoJKType type);
 
+inline constexpr auto TS_ANALYZE_MODE = _T("ts_analyze");
+
 struct Config {
     // 一時フォルダ
     tstring workDir;
@@ -358,6 +360,8 @@ public:
         const Config& conf);
 
     tstring getMode() const;
+    bool isTsAnalyzeOnly() const;
+    bool isAnalysisOnly() const;
 
     tstring getModeArgs() const;
 

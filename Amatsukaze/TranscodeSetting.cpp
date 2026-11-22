@@ -905,6 +905,14 @@ tstring ConfigWrapper::getMode() const {
     return conf.mode;
 }
 
+bool ConfigWrapper::isTsAnalyzeOnly() const {
+    return conf.mode == TS_ANALYZE_MODE;
+}
+
+bool ConfigWrapper::isAnalysisOnly() const {
+    return isTsAnalyzeOnly() || conf.mode == _T("cm");
+}
+
 tstring ConfigWrapper::getModeArgs() const {
     return conf.modeArgs;
 }
@@ -1939,9 +1947,25 @@ void ConfigWrapper::dump() const {
     if (conf.mode != _T("ts")) {
         ctx.infoF(_T("Mode: %s"), conf.mode);
     }
+    const auto dumpInputSettings = [&]() {
+        if (conf.serviceId > 0) {
+            ctx.infoF(_T("サービスID: %d"), conf.serviceId);
+        } else {
+            ctx.info(_T("サービスID: 指定なし"));
+        }
+        ctx.infoF(_T("デコーダ: MPEG2:%s H264:%s HEVC:%s"),
+            decoderToString(conf.decoderSetting.mpeg2),
+            decoderToString(conf.decoderSetting.h264),
+            decoderToString(conf.decoderSetting.hevc));
+    };
     ctx.infoF(_T("入力: %s"), conf.srcFilePath);
     if (conf.srcFilePath != conf.srcFilePathOrg) {
         ctx.infoF(_T("入力 (オリジナル): %s"), conf.srcFilePathOrg);
+    }
+    if (isTsAnalyzeOnly()) {
+        ctx.infoF(_T("一時フォルダ: %s"), tmpDir.path());
+        dumpInputSettings();
+        return;
     }
     ctx.infoF(_T("出力: %s"), conf.outVideoPath);
     ctx.infoF(_T("一時フォルダ: %s"), tmpDir.path());
@@ -2007,15 +2031,7 @@ void ConfigWrapper::dump() const {
         }
         ctx.infoF(_T("DRCSマッピング: %s"), conf.drcsMapPath);
     }
-    if (conf.serviceId > 0) {
-        ctx.infoF(_T("サービスID: %d"), conf.serviceId);
-    } else {
-        ctx.info(_T("サービスID: 指定なし"));
-    }
-    ctx.infoF(_T("デコーダ: MPEG2:%s H264:%s HEVC:%s"),
-        decoderToString(conf.decoderSetting.mpeg2),
-        decoderToString(conf.decoderSetting.h264),
-        decoderToString(conf.decoderSetting.hevc));
+    dumpInputSettings();
     if (conf.mode == _T("cm")) {
         ctx.infoF(_T("Trim・分割点情報をコピー: %s"), conf.copyTrimAVS ? _T("有効") : _T("無効"));
     }

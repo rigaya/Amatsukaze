@@ -616,7 +616,7 @@ static void saveResumeStreamInfo(
 }
 
 static bool isCaptionParsingEnabled(const ConfigWrapper& setting) {
-    return setting.isSubtitlesEnabled() || setting.isNoRemoveTmp();
+    return !setting.isTsAnalyzeOnly() && (setting.isSubtitlesEnabled() || setting.isNoRemoveTmp());
 }
 
 static void copyCutInfoForCMOnly(
@@ -952,7 +952,7 @@ AMTSplitter::AMTSplitter(AMTContext& ctx, const ConfigWrapper& setting)
     , waveFileSize_(0)
     , srcFileSize_(0) {
     psWriter.setHandler(&writeHandler);
-    if (setting.getMode() == _T("cm") && GetProcessorCount() > 1) {
+    if (setting.isAnalysisOnly() && GetProcessorCount() > 1) {
         audioPipeline_.reset(new AudioPesPipeline(ctx,
             [this](int audioIdx, int64_t clock, const std::vector<AudioFrameData>& frames, PESPacket packet, const AudioComponentInfo& component) {
                 auto& format = asyncAudioFormats_[audioIdx];
@@ -1024,14 +1024,14 @@ void AMTSplitter::readAll() {
     };
     ReadAheadFile srcfile(setting_.getSrcFilePath(), BUFSIZE, BUFFER_COUNT);
     // tsreplaceで一時TSを使う場合だけ、入力TSのコピーを作成する。
-    const bool needCopyTS = setting_.getFormat() == FORMAT_TSREPLACE
+    const bool needCopyTS = !setting_.isTsAnalyzeOnly() && setting_.getFormat() == FORMAT_TSREPLACE
         && setting_.isMuxTsTempEnabled();
     std::unique_ptr<File> rawts;
     if (needCopyTS) {
         rawts.reset(new File(setting_.getTmpRawTSPath(), _T("wb")));
     }
     std::unique_ptr<TsReadExPipe> tsreadex;
-    if (isTsReadExAvailable(setting_)) {
+    if (!setting_.isTsAnalyzeOnly() && isTsReadExAvailable(setting_)) {
         tsreadex.reset(new TsReadExPipe(ctx, setting_));
     }
     srcFileSize_ = srcfile.size();
@@ -1572,59 +1572,64 @@ void DoBadThing() {
     const_cast<ConfigWrapper&>(setting).CreateTempDir();
     setting.dump();
 
-    bool isNoEncode = (setting.getMode() == _T("cm"));
+    const bool tsAnalyzeOnly = setting.isTsAnalyzeOnly();
+    const bool isNoEncode = setting.isAnalysisOnly();
 
-    auto eoInfo = ParseEncoderOption(setting.getEncoder(), setting.getEncoderOptions());
-    ctx.info(_T("[本エンコーダ設定]"));
-    PrintEncoderInfo(ctx, eoInfo);
-    if (setting.isEncoderFilterEnabled()) {
-        const tstring& filterOptions = setting.getEncoderFilterOptions();
-        if (filterOptions.find(_T("--output-res")) != tstring::npos
-            || filterOptions.find(_T("--crop")) != tstring::npos
-            || filterOptions.find(_T("--vpp-pad")) != tstring::npos) {
-            ctx.warn(_T("エンコーダフィルタによる解像度変更はコンテナのメタデータ (解像度/SAR) に反映されません"));
+    EncoderOptionInfo eoInfo{};
+    int encoderParallel = 1;
+    if (!tsAnalyzeOnly) {
+        eoInfo = ParseEncoderOption(setting.getEncoder(), setting.getEncoderOptions());
+        ctx.info(_T("[本エンコーダ設定]"));
+        PrintEncoderInfo(ctx, eoInfo);
+        if (setting.isEncoderFilterEnabled()) {
+            const tstring& filterOptions = setting.getEncoderFilterOptions();
+            if (filterOptions.find(_T("--output-res")) != tstring::npos
+                || filterOptions.find(_T("--crop")) != tstring::npos
+                || filterOptions.find(_T("--vpp-pad")) != tstring::npos) {
+                ctx.warn(_T("エンコーダフィルタによる解像度変更はコンテナのメタデータ (解像度/SAR) に反映されません"));
+            }
         }
-    }
-    if (setting.isEncoderFilterSeparate()) {
-        // エンコーダフィルタのオプション文字列は解析しない。
-        // インタレース解除の有無はGUI設定から明示的に受け取り、
-        // フレームレート・フレーム数の変化はエンコード後に実測タイムコードから判定する。
-        if (eoInfo.deint != ENCODER_DEINT_NONE && setting.isEncoderFilterDeinterlace()) {
-            THROW(ArgumentException, "本エンコーダとエンコーダフィルタの両方でインタレース解除が指定されています");
+        if (setting.isEncoderFilterSeparate()) {
+            // エンコーダフィルタのオプション文字列は解析しない。
+            // インタレース解除の有無はGUI設定から明示的に受け取り、
+            // フレームレート・フレーム数の変化はエンコード後に実測タイムコードから判定する。
+            if (eoInfo.deint != ENCODER_DEINT_NONE && setting.isEncoderFilterDeinterlace()) {
+                THROW(ArgumentException, "本エンコーダとエンコーダフィルタの両方でインタレース解除が指定されています");
+            }
         }
-    }
-    const int cliParallel = setting.getEncoderParallel();
-    const int encoderParallel = (cliParallel > 1) ? cliParallel : ((eoInfo.parallel > 1) ? eoInfo.parallel : 1);
-    if (setting.isEncoderFilterSeparate() && encoderParallel > 1 && !isSoftwareSplitEncoder(setting.getEncoder())) {
-        THROW(ArgumentException, "別プロセスのエンコーダフィルタとネイティブ分割並列エンコードは併用できません。フィルタがフレーム数を変更するとchunk-handlesの開始フレームが本エンコーダの出力フレーム位置と一致しないためです");
-    }
-    if (setting.isTwoPass() && encoderParallel > 1) {
-        THROW(ArgumentException, "2passエンコード時は分割エンコードを使用できません (--enc-parallel / --parallel は無効です)");
-    }
-    if (setting.isEncoderFilterSeparate() && setting.isTwoPass()) {
-        ctx.warn(_T("エンコーダフィルタを別プロセスで使用する2passエンコードでは、フィルタ処理も2回実行されます"));
-    }
+        const int cliParallel = setting.getEncoderParallel();
+        encoderParallel = (cliParallel > 1) ? cliParallel : ((eoInfo.parallel > 1) ? eoInfo.parallel : 1);
+        if (setting.isEncoderFilterSeparate() && encoderParallel > 1 && !isSoftwareSplitEncoder(setting.getEncoder())) {
+            THROW(ArgumentException, "別プロセスのエンコーダフィルタとネイティブ分割並列エンコードは併用できません。フィルタがフレーム数を変更するとchunk-handlesの開始フレームが本エンコーダの出力フレーム位置と一致しないためです");
+        }
+        if (setting.isTwoPass() && encoderParallel > 1) {
+            THROW(ArgumentException, "2passエンコード時は分割エンコードを使用できません (--enc-parallel / --parallel は無効です)");
+        }
+        if (setting.isEncoderFilterSeparate() && setting.isTwoPass()) {
+            ctx.warn(_T("エンコーダフィルタを別プロセスで使用する2passエンコードでは、フィルタ処理も2回実行されます"));
+        }
 
-    // チェック
-    if (!isNoEncode && eoInfo.afsTimecode && !setting.isFormatVFRSupported()) {
-        THROW(FormatException, "M2TS/TS出力はVFRをサポートしていません");
-    }
-    if (!isNoEncode && eoInfo.afsTimecode && setting.isEncoderFilterSeparate()) {
-        // 別プロセスのエンコーダフィルタ出力へ本エンコーダでさらにVFR化を適用すると、
-        // 両段のタイムライン変更を正しく統合できない。
-        THROW(ArgumentException,
-            "エンコーダフィルタと本エンコーダの両方でVFR化することはできません");
-    }
-    if (setting.getFormat() == FORMAT_TSREPLACE) {
-        auto cmtypes = setting.getCMTypes();
-        const bool supportedSingleOutput = cmtypes.size() == 1;
-        const bool supportedSplitOutput = cmtypes.size() == 2
-            && cmtypes[0] == CMTYPE_NONCM && cmtypes[1] == CMTYPE_CM;
-        if (!supportedSingleOutput && !supportedSplitOutput) {
-            THROW(FormatException, "tsreplaceの出力選択が不正です");
+        // チェック
+        if (!isNoEncode && eoInfo.afsTimecode && !setting.isFormatVFRSupported()) {
+            THROW(FormatException, "M2TS/TS出力はVFRをサポートしていません");
         }
-        if (eoInfo.format != VS_H264 && eoInfo.format != VS_H265 && eoInfo.format != VS_MPEG2) {
-            THROW(FormatException, "tsreplaceはH.264/H.265/MPEG-2以外には対応していません");
+        if (!isNoEncode && eoInfo.afsTimecode && setting.isEncoderFilterSeparate()) {
+            // 別プロセスのエンコーダフィルタ出力へ本エンコーダでさらにVFR化を適用すると、
+            // 両段のタイムライン変更を正しく統合できない。
+            THROW(ArgumentException,
+                "エンコーダフィルタと本エンコーダの両方でVFR化することはできません");
+        }
+        if (setting.getFormat() == FORMAT_TSREPLACE) {
+            auto cmtypes = setting.getCMTypes();
+            const bool supportedSingleOutput = cmtypes.size() == 1;
+            const bool supportedSplitOutput = cmtypes.size() == 2
+                && cmtypes[0] == CMTYPE_NONCM && cmtypes[1] == CMTYPE_CM;
+            if (!supportedSingleOutput && !supportedSplitOutput) {
+                THROW(FormatException, "tsreplaceの出力選択が不正です");
+            }
+            if (eoInfo.format != VS_H264 && eoInfo.format != VS_H265 && eoInfo.format != VS_MPEG2) {
+                THROW(FormatException, "tsreplaceはH.264/H.265/MPEG-2以外には対応していません");
+            }
         }
     }
 
@@ -1669,7 +1674,7 @@ void DoBadThing() {
     }
     StreamReformInfo& reformInfo = *reformInfoPtr;
 
-    if (!isReusingTmp && setting.isNoRemoveTmp()) {
+    if (!tsAnalyzeOnly && !isReusingTmp && setting.isNoRemoveTmp()) {
         saveResumeStreamInfo(ctx, setting, reformInfo);
     }
     if (!isReusingTmp && captionsParsed && !setting.isSubtitlesEnabled()) {
@@ -1700,7 +1705,7 @@ void DoBadThing() {
         reformInfo.prepare(setting.isSplitSub(), setting.isEncodeAudio(), setting.getFormat() == FORMAT_TSREPLACE,
             setting.getAudioFormatChangeMode(), setting.getAudioFilePath(), setting.isIgnoreVideoDisplayChanges());
     }
-    if (setting.isMpeg2PartialEnabled()) {
+    if (!tsAnalyzeOnly && setting.isMpeg2PartialEnabled()) {
         if (reformInfo.getVideoStreamFormat() != VS_MPEG2) {
             THROW(FormatException, "--mpeg2-partialの入力映像はMPEG-2である必要があります");
         }
@@ -1712,14 +1717,7 @@ void DoBadThing() {
         }
     }
 
-    time_t startTime = reformInfo.getFirstFrameTime();
-
-    NicoJK nicoJK(ctx, setting);
-    bool nicoOK = false;
-
-    int numVideoFiles = reformInfo.getNumVideoFile();
-    int mainFileIndex = reformInfo.getMainVideoFileIndex();
-    std::vector<std::unique_ptr<CMAnalyze>> cmanalyze;
+    const int numVideoFiles = reformInfo.getNumVideoFile();
 
     // ソースファイル読み込み用データ保存
     if (isReusingTmp) {
@@ -1747,6 +1745,16 @@ void DoBadThing() {
             setting.getDecoderSetting(), primaryAudioFrames);
         ctx.infoF(_T("ソースファイル読み込み用データ保存完了[%d/%d]"), videoFileIndex + 1, numVideoFiles);
     }
+
+    if (tsAnalyzeOnly) {
+        return;
+    }
+
+    time_t startTime = reformInfo.getFirstFrameTime();
+    NicoJK nicoJK(ctx, setting);
+    bool nicoOK = false;
+    int mainFileIndex = reformInfo.getMainVideoFileIndex();
+    std::vector<std::unique_ptr<CMAnalyze>> cmanalyze;
 
     // ロゴ・CM解析
     if (!isReusingTmp) {
