@@ -23,10 +23,11 @@ public partial class FilterAdjust
     private string? _encoderBoundary;
     private string EncoderDisplayMode => _view == "compare" ? "sideBySide" : _view;
     private string EncoderSeekValue => FormatSeconds(_encoderSeconds);
+    private string EncoderSeekMax => FormatSeconds(_encoderDurationSeconds ?? 0);
     private string EncoderTimeText => FormatTime(_encoderSeconds);
     private static string FormatSeconds(double seconds) => seconds.ToString("0.######", CultureInfo.InvariantCulture);
-    private bool CanStep(int direction) => CanOperate && (IsEncoder
-        ? Ready && _encoderBoundary != (direction < 0 ? "start" : "end")
+    private bool CanStep(int direction) => direction is -1 or 1 && Ready && !_fetchingFrame && (IsEncoder
+        ? _encoderBoundary != (direction < 0 ? "start" : "end")
         : direction < 0 ? _position > 0 : _position < MaxFrame);
     private static string FormatTime(double seconds)
     {

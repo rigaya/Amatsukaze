@@ -249,20 +249,12 @@ public partial class FilterAdjust
     private Task RefreshAsync() => IsEncoder ? RefreshEncoderAsync() : StartFrameAsync(null);
     private Task StepAsync(int direction)
     {
+        // 応答待ちの反復入力は保留せず、実際に確定した表示からだけコマを進める。
+        if (!CanStep(direction)) return Task.CompletedTask;
         if (IsEncoder) return StartEncoderViewAsync(new("step", Direction: direction < 0 ? "previous" : "next"));
-        if (CanOperate && !Ready)
-        {
-            SetAviSynthPosition(_position + direction);
-            return Task.CompletedTask;
-        }
         return StartFrameAsync(direction);
     }
-    [JSInvokable] public Task StepPreviewAsync(int direction) => InvokeAsync(async () =>
-    {
-        if (direction is not (-1 or 1) || !CanStep(direction)) return;
-        await StepAsync(direction);
-        if (!_disposed) StateHasChanged();
-    });
+    [JSInvokable] public Task StepPreviewAsync(int direction) => InvokeAsync(() => StepAsync(direction));
     private Task SetViewAsync(string value)
     {
         _view = value;
@@ -272,10 +264,10 @@ public partial class FilterAdjust
     private Task SetQualityAsync(string value) { _quality = value; return QualityChangedAsync(); }
     private async Task OnKeyDown(KeyboardEventArgs e)
     {
-        if (e.Key is not ("ArrowLeft" or "ArrowRight") || !CanOperate || _lifecycle == null) return;
-        if (await _lifecycle.InvokeAsync<bool>("inputFocused")) return;
+        if (e.Key is not ("ArrowLeft" or "ArrowRight") || _lifecycle == null) return;
         int direction = e.Key == "ArrowLeft" ? -1 : 1;
-        if (!IsEncoder || CanStep(direction)) await StepAsync(direction);
+        if (!CanStep(direction) || await _lifecycle.InvokeAsync<bool>("inputFocused")) return;
+        await StepAsync(direction);
     }
     private Task SeekAsync(ChangeEventArgs e)
     {

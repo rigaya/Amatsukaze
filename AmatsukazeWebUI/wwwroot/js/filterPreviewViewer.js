@@ -11,7 +11,7 @@ export function bind(viewport, layer, before, after, divider, fitButton, actualS
     let width = 0, height = 0;
     let zoom = null;
     let split = 0.5, view = "after";
-    let wheel = 0, pendingSteps = 0, stepping = false;
+    let wheel = 0, stepping = false;
     let drag = null;
 
     function geometry() {
@@ -76,16 +76,10 @@ export function bind(viewport, layer, before, after, divider, fitButton, actualS
         render();
     }
 
-    async function step(count) {
-        pendingSteps += count;
-        if (stepping) return;
+    async function step(direction) {
         stepping = true;
         try {
-            while (pendingSteps && !signal.aborted) {
-                const direction = Math.sign(pendingSteps);
-                pendingSteps -= direction;
-                await callback.invokeMethodAsync("StepPreviewAsync", direction);
-            }
+            await callback.invokeMethodAsync("StepPreviewAsync", direction);
         } finally {
             stepping = false;
         }
@@ -99,10 +93,11 @@ export function bind(viewport, layer, before, after, divider, fitButton, actualS
             zoomAt(event.clientX, event.clientY, wheelZoom ** (-pixels / pixelsPerWheelStep));
             return;
         }
+        if (stepping) return;
         wheel += pixels;
         const count = Math.trunc(wheel / pixelsPerWheelStep);
         wheel -= count * pixelsPerWheelStep;
-        if (count) step(count).catch(error => { if (!signal.aborted) console.error(error); });
+        if (count) step(Math.sign(count)).catch(error => { if (!signal.aborted) console.error(error); });
     }
 
     function isOnDivider(event) {
