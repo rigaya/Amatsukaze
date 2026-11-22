@@ -205,6 +205,9 @@ namespace Amatsukaze.Models
         #endregion
 
         public bool IsComplete { get { return Model.State == QueueState.Complete; } }
+        private bool IsBatchMode => Model.Mode is ProcMode.Batch or ProcMode.AutoBatch;
+        public bool CanOpenTrimAdjust => Model != null && IsComplete && (IsBatchMode || Model.Mode.HasCmAnalysis());
+        public bool CanOpenFilterAdjust => Model != null && IsComplete && (IsBatchMode || Model.Mode.IsAnalysisOnly());
         public bool IsEncoding { get { return Model.State == QueueState.Encoding; } }
         public bool IsError { get { return Model.State == QueueState.Failed || Model.State == QueueState.PreFailed; } }
         public bool IsPending { get { return Model.State == QueueState.LogoPending; } }
@@ -263,6 +266,7 @@ namespace Amatsukaze.Models
                         switch (Model.Mode)
                         {
                             case ProcMode.FilterAdjust:
+                                return "TS解析中→" + (Model.ConsoleId + 1);
                             case ProcMode.TrimAdjust:
                             case ProcMode.CMCheck:
                                 return "CM解析中→" + (Model.ConsoleId + 1);

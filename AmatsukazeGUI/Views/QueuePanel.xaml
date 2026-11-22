@@ -1007,9 +1007,11 @@
                             ToolTip="並列数制限やリソース制限を無視して強制的に実行します" />
                         <Separator />
                         <MenuItem Header="カット調整" Style="{StaticResource MenuForSelectedItems}"
+                            IsEnabled="{Binding ElementName=QueueList, Path=SelectedItem.CanOpenTrimAdjust, FallbackValue=False}"
                             Command="{Binding OpenTrimAdjustCommand}"
                             CommandParameter="{Binding SelectedItems, ElementName=QueueList}"/>
                         <MenuItem Header="フィルタ調整" Style="{StaticResource MenuForSelectedItems}"
+                            IsEnabled="{Binding ElementName=QueueList, Path=SelectedItem.CanOpenFilterAdjust, FallbackValue=False}"
                             Command="{Binding OpenFilterAdjustCommand}"
                             CommandParameter="{Binding SelectedItems, ElementName=QueueList}"/>
                         <Separator />

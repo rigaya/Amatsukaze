@@ -55,8 +55,8 @@ namespace Amatsukaze.AddTask
                 "  --proc-mode <mode>      タスクの処理モード(batch|auto|test|drcs|cm|trim|filter)\r\n" +
                 "                          batch: 一括バッチ, auto: 自動バッチ(デフォルト)\r\n" +
                 "                          test: テストエンコードのみ, drcs: DRCS解析のみ, cm: CM解析のみ\r\n" +
-                "                          trim: カット調整, filter: フィルタ調整\r\n" +
-                "                          CM解析後、一時ファイルを残してフィルタ調整画面を開きます。\r\n" +
+                "                          trim: CM解析後、一時ファイルを残してカット調整画面を開きます。\r\n" +
+                "                          filter: TS解析後、一時ファイルを残してフィルタ調整画面を開きます。\r\n" +
                 "  -o|--outdir <パス>      出力先ディレクトリ（-f 指定時は必須）\r\n" +
                 "  -d|--nasdir <パス>      NASのTSファイル置き場\r\n" +
                 "  --remote-dir <パス>     サーバから入力ファイルにアクセスするときのディレクトリパス\r\n" +

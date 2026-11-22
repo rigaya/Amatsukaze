@@ -753,22 +753,14 @@ namespace Amatsukaze.ViewModels
         }
         #endregion
 
-        private static bool CanOpenTrimAdjust(DisplayQueueItem item)
-        {
-            return item != null &&
-                item.Model != null &&
-                (item.Model.Mode == ProcMode.Batch || item.Model.Mode == ProcMode.AutoBatch || item.Model.Mode.IsAnalysisOnly()) &&
-                item.Model.State == QueueState.Complete;
-        }
-
         public ListenerCommand<IEnumerable> OpenFilterAdjustCommand => new ListenerCommand<IEnumerable>(OpenFilterAdjust);
 
         private void OpenFilterAdjust(IEnumerable selectedItems)
         {
             var item = selectedItems?.OfType<DisplayQueueItem>().FirstOrDefault();
-            if (!CanOpenTrimAdjust(item))
+            if (item?.CanOpenFilterAdjust != true)
             {
-                MessageBox.Show("フィルタ調整はエンコードまたはCM解析が完了したアイテムでのみ使用できます");
+                MessageBox.Show("フィルタ調整はエンコード、CM解析、またはTS解析が完了したアイテムで使用できます");
                 return;
             }
             if (!TryOpenWebPage($"/filter-adjust/{item.Model.Id}"))
@@ -793,7 +785,7 @@ namespace Amatsukaze.ViewModels
         public void OpenTrimAdjust(IEnumerable selectedItems)
         {
             var item = selectedItems?.OfType<DisplayQueueItem>().FirstOrDefault();
-            if (!CanOpenTrimAdjust(item))
+            if (item?.CanOpenTrimAdjust != true)
             {
                 MessageBox.Show("カット調整はエンコードまたはCM解析が完了したアイテムでのみ使用できます");
                 return;
@@ -1098,10 +1090,10 @@ namespace Amatsukaze.ViewModels
                 return;
             }
 
-            // CM解析のみの実行
+            // 解析のみの実行には出力ファイルがない。
             if (item.Model.Mode.IsAnalysisOnly())
             {
-                MessageBox.Show("CM解析のみの実行です。出力ファイルはありません。");
+                MessageBox.Show("解析のみの実行です。出力ファイルはありません。");
                 return;
             }
             

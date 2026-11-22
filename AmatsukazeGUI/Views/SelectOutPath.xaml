@@ -131,7 +131,7 @@
         </Button>
         <Button Margin="2" Height="Auto" Command="{Binding FilterAdjustCommand, Mode=OneWay}">
             <TextBlock TextAlignment="Center" TextWrapping="Wrap">
-                <Run FontSize="20" Text="フィルタ調整"/><LineBreak/><Run Text="CM解析後、一時ファイルを残してフィルタ調整画面を開きます。"/>
+                <Run FontSize="20" Text="フィルタ調整"/><LineBreak/><Run Text="TS解析後、一時ファイルを残してフィルタ調整画面を開きます。"/>
             </TextBlock>
         </Button>
 
