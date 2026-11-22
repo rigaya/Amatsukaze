@@ -360,11 +360,11 @@ std::wstring getExeDirW() {
 
 std::string getExePathA() {
     char prg_path[16384];
-    auto ret = readlink("/proc/self/exe", prg_path, sizeof(prg_path));
-    if (ret <= 0) {
-        prg_path[0] = '\0';
+    const auto length = readlink("/proc/self/exe", prg_path, sizeof(prg_path));
+    if (length <= 0 || static_cast<size_t>(length) == sizeof(prg_path)) {
+        return {};
     }
-    return prg_path;
+    return std::string(prg_path, static_cast<size_t>(length));
 }
 
 std::wstring getExePathW() {
