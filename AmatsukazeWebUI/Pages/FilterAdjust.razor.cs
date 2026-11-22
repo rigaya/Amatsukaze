@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Text.Json.Nodes;
 using Amatsukaze.Shared;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.WebAssembly.Http;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.JSInterop;
 
@@ -331,6 +332,7 @@ public partial class FilterAdjust
     {
         var token = cancellation.Token;
         bool Current() => !_disposed && gen == _generation && revision == _frameRevision && !token.IsCancellationRequested;
+        PreviewFrame? after = null, before = null;
         try
         {
             if (!Current()) return;
@@ -342,15 +344,18 @@ public partial class FilterAdjust
             var pos = seek ?? _position;
             var view = _view;
             var options = CaptureFrameOptions();
-            PreviewFrame? after = null, before = null;
             if (view == "compare" && !step.HasValue)
             {
                 // 取得を同時に開始し、両方がそろってから新しい比較画像を描く。
                 var afterTask = FetchFrameAsync("after", pos, null, gen, options, token);
                 var beforeTask = FetchFrameAsync("before", pos, null, gen, options, token);
-                await Task.WhenAll(afterTask, beforeTask);
-                after = await afterTask;
-                before = await beforeTask;
+                try { await Task.WhenAll(afterTask, beforeTask); }
+                finally
+                {
+                    // 片側で失敗しても、取得済みのもう片側の応答を破棄する。
+                    if (afterTask.IsCompletedSuccessfully) after = afterTask.Result;
+                    if (beforeTask.IsCompletedSuccessfully) before = beforeTask.Result;
+                }
             }
             else
             {
@@ -373,7 +378,14 @@ public partial class FilterAdjust
             var dar = _inputDar > 0 ? _inputDar : display.Width * display.Sar / display.Height;
             await _viewer!.InvokeVoidAsync("present", view, height * dar, height);
             if (!Current()) return;
-            _displayedView = view;
+            if (_displayedView != view)
+            {
+                _displayedView = view;
+                StateHasChanged();
+            }
+            await Task.WhenAll(after?.ValidateEndAsync(token) ?? Task.CompletedTask,
+                before?.ValidateEndAsync(token) ?? Task.CompletedTask);
+            if (!Current()) return;
             if (after != null) UpdateFrameInfo(after.Metadata);
             pos = after?.Position ?? before!.Position;
             // 中間フレームを描画しても、つまみは新しい入力位置に留める。
@@ -382,16 +394,30 @@ public partial class FilterAdjust
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
         catch (Exception ex) { if (Current()) ShowError(ex); }
-        finally { FinishFrameRequest(cancellation); }
+        finally
+        {
+            after?.Dispose();
+            before?.Dispose();
+            FinishFrameRequest(cancellation);
+        }
     }
     private sealed record FrameOptions(int Scale, string Format, int[]? Crop, bool Decimate);
-    private sealed record PreviewFrame(byte[] Data, Dictionary<string, string> Metadata, string? Mime, int Position)
+    private sealed record PreviewFrame(byte[] Data, Dictionary<string, string> Metadata, string? Mime, int Position,
+        HttpResponseMessage? Response = null, Stream? Body = null) : IDisposable
     {
         public int Width => int.Parse(Metadata["width"], CultureInfo.InvariantCulture);
         public int Height => int.Parse(Metadata["height"], CultureInfo.InvariantCulture);
         public double Sar => Metadata.TryGetValue("sarnum", out var sn) && double.TryParse(sn, CultureInfo.InvariantCulture, out var numerator)
             && Metadata.TryGetValue("sarden", out var sd) && double.TryParse(sd, CultureInfo.InvariantCulture, out var denominator)
             && numerator > 0 && denominator > 0 ? numerator / denominator : 1;
+
+        public async Task ValidateEndAsync(CancellationToken token)
+        {
+            if (Body != null && await Body.ReadAsync(new byte[1], token) != 0)
+                throw new InvalidDataException("YUV応答に余分なデータがあります");
+        }
+
+        public void Dispose() => Response?.Dispose();
     }
     private FrameOptions CaptureFrameOptions()
     {
@@ -407,15 +433,72 @@ public partial class FilterAdjust
     }
     private async Task<PreviewFrame> FetchFrameAsync(string side, int pos, int? step, long gen, FrameOptions options, CancellationToken token)
     {
-        using var response = await Http.PostAsJsonAsync(SessionUrl + "/frame",
-            new { gen, pos, side, scale = options.Scale, format = options.Format, crop = options.Crop, step, decimate = options.Decimate }, token);
-        await CheckAsync(response, token);
-        var metadata = response.Headers.Where(x => x.Key.StartsWith("X-Filter-Preview-", StringComparison.OrdinalIgnoreCase))
-            .ToDictionary(x => x.Key["X-Filter-Preview-".Length..].ToLowerInvariant(), x => string.Join(",", x.Value));
-        if (!metadata.TryGetValue("gen", out var returnedGen) || returnedGen != gen.ToString(CultureInfo.InvariantCulture)) throw new InvalidOperationException("フレームの世代が一致しません");
-        var bytes = await response.Content.ReadAsByteArrayAsync(token);
-        var actual = metadata.TryGetValue("pos", out var value) && int.TryParse(value, out var result) ? result : pos;
-        return new PreviewFrame(bytes, metadata, response.Content.Headers.ContentType?.MediaType, actual);
+        using var request = new HttpRequestMessage(HttpMethod.Post, SessionUrl + "/frame")
+        {
+            Content = JsonContent.Create(new { gen, pos, side, scale = options.Scale, format = options.Format,
+                crop = options.Crop, step, decimate = options.Decimate })
+        };
+        bool yuv = options.Format == "yuv";
+        if (yuv) request.SetBrowserResponseStreamingEnabled(true);
+        var response = await Http.SendAsync(request, yuv ? HttpCompletionOption.ResponseHeadersRead : HttpCompletionOption.ResponseContentRead, token);
+        bool keepResponse = false;
+        try
+        {
+            await CheckAsync(response, token);
+            var metadata = response.Headers.Where(x => x.Key.StartsWith("X-Filter-Preview-", StringComparison.OrdinalIgnoreCase))
+                .ToDictionary(x => x.Key["X-Filter-Preview-".Length..].ToLowerInvariant(), x => string.Join(",", x.Value));
+            if (!metadata.TryGetValue("gen", out var returnedGen) || returnedGen != gen.ToString(CultureInfo.InvariantCulture))
+                throw new InvalidOperationException("フレームの世代が一致しません");
+            var actual = metadata.TryGetValue("pos", out var value) && int.TryParse(value, out var result) ? result : pos;
+            var mime = response.Content.Headers.ContentType?.MediaType;
+            if (!yuv) return new PreviewFrame(await response.Content.ReadAsByteArrayAsync(token), metadata, mime, actual);
+
+            // Content-Lengthは圧縮後の長さなので、展開後の画素長は画像のメタデータから求める。
+            var data = new byte[GetYuvPayloadSize(metadata)];
+            var body = await response.Content.ReadAsStreamAsync(token);
+            try { await body.ReadExactlyAsync(data, token); }
+            catch (EndOfStreamException ex) { throw new InvalidDataException("YUV応答が途中で終了しました", ex); }
+            var frame = new PreviewFrame(data, metadata, mime, actual, response, body);
+            keepResponse = true;
+            return frame;
+        }
+        finally
+        {
+            if (!keepResponse) response.Dispose();
+        }
+    }
+
+    private static int GetYuvPayloadSize(Dictionary<string, string> metadata)
+    {
+        string? format = metadata.GetValueOrDefault("format");
+        if (format is null || !format.StartsWith("yuv", StringComparison.Ordinal) || format.Length < 8 || format[6] != 'p'
+            || !int.TryParse(format.AsSpan(7), NumberStyles.None, CultureInfo.InvariantCulture, out int depth) || depth is < 8 or > 16
+            || !ReadDimension("width", out int width) || !ReadDimension("height", out int height))
+            throw new InvalidDataException("YUV応答の画像形式または寸法が不正です");
+        string chroma = format.Substring(3, 3);
+        if (chroma is not ("420" or "422" or "444"))
+            throw new InvalidDataException("YUV応答の色差形式が不正です");
+
+        var pitches = metadata.GetValueOrDefault("pitches")?.Split(',');
+        if (pitches is not { Length: 3 }) throw new InvalidDataException("YUV応答のpitchが不正です");
+        int sampleBytes = depth > 8 ? 2 : 1;
+        int size = 0;
+        for (int plane = 0; plane < pitches.Length; plane++)
+        {
+            long columns = plane == 0 || chroma == "444" ? width : (width + 1L) / 2;
+            long rows = plane == 0 || chroma != "420" ? height : (height + 1L) / 2;
+            if (!int.TryParse(pitches[plane], NumberStyles.None, CultureInfo.InvariantCulture, out int pitch)
+                || pitch < columns * sampleBytes || pitch % sampleBytes != 0)
+                throw new InvalidDataException("YUV応答のpitchが不正です");
+            long planeSize = rows * pitch;
+            if (planeSize > MaxViewPayloadBytes - size)
+                throw new InvalidDataException("YUV応答の画素長が上限を超えています");
+            size += (int)planeSize;
+        }
+        return size;
+
+        bool ReadDimension(string name, out int dimension)
+            => int.TryParse(metadata.GetValueOrDefault(name), NumberStyles.None, CultureInfo.InvariantCulture, out dimension) && dimension > 0;
     }
     private async Task DrawFrameAsync(ElementReference canvas, string side, PreviewFrame frame, long gen, FrameOptions options, Func<bool> current, CancellationToken token)
     {
@@ -426,7 +509,7 @@ public partial class FilterAdjust
             _pngFallback = true;
             // 同じ位置のPNGを頼むため、コマ送りは再適用しない。
             var pngOptions = options with { Format = "png" };
-            var png = await FetchFrameAsync(side, frame.Position, null, gen, pngOptions, token);
+            using var png = await FetchFrameAsync(side, frame.Position, null, gen, pngOptions, token);
             if (current()) await DrawFrameAsync(canvas, side, png, gen, pngOptions, current, token);
         }
         else if (!success) throw new InvalidOperationException("画像を描画できません");
