@@ -202,6 +202,7 @@ namespace Amatsukaze.Shared
         public List<GenreNodeView>? Genres { get; set; }
         public List<string>? GenreNames { get; set; }
         public bool CanTrimAdjust { get; set; }
+        public bool CanFilterAdjust { get; set; }
     }
 
     public class QueueCounters

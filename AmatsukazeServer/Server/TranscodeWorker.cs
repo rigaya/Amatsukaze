@@ -477,7 +477,7 @@ namespace Amatsukaze.Server
         {
             return new CheckLogItem()
             {
-                Type = (mode == ProcMode.DrcsCheck) ? CheckType.DRCS : CheckType.CM,
+                Type = mode.GetCheckLogType(),
                 Success = success,
                 Reason = reason,
                 SrcPath = item.SrcPath,
@@ -502,6 +502,7 @@ namespace Amatsukaze.Server
                 case ProcMode.DrcsCheck:
                     return "DRCSチェック";
                 case ProcMode.FilterAdjust:
+                    return "TS解析";
                 case ProcMode.TrimAdjust:
                 case ProcMode.CMCheck:
                     return "CM解析";
@@ -513,11 +514,11 @@ namespace Amatsukaze.Server
         internal static string GetOutputLogPath(ProcMode mode, string dstPath,
             bool disableLogFile, bool enableCMLogFile)
         {
-            if (mode == ProcMode.DrcsCheck)
+            if (mode == ProcMode.DrcsCheck || mode == ProcMode.FilterAdjust)
             {
                 return null;
             }
-            if (mode.IsAnalysisOnly())
+            if (mode.HasCmAnalysis())
             {
                 return enableCMLogFile ? dstPath + "-cm.log" : null;
             }
@@ -837,7 +838,7 @@ namespace Amatsukaze.Server
             bool enableChapter = !profile.DisableChapter;
             bool enableDelogo = !profile.NoDelogo;
             bool enableLogoForChapter = enableChapter && !profile.NoLogoInCM;
-            if (item.Mode != ProcMode.DrcsCheck && (enableLogoForChapter || enableDelogo))
+            if (item.Mode != ProcMode.DrcsCheck && item.Mode != ProcMode.FilterAdjust && (enableLogoForChapter || enableDelogo))
             {
                 var logofiles = serviceSetting.LogoSettings
                     .Where(s => s.CanUse(item.TsTime))

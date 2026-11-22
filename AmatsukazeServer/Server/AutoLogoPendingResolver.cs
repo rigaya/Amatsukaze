@@ -177,7 +177,7 @@ namespace Amatsukaze.Server
             {
                 return false;
             }
-            if (item.State != QueueState.LogoPending)
+            if (item.Mode == ProcMode.FilterAdjust || item.State != QueueState.LogoPending)
             {
                 return false;
             }

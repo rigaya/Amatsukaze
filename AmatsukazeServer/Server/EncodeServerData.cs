@@ -1576,6 +1576,16 @@ namespace Amatsukaze.Server
     {
         public static bool IsAnalysisOnly(this ProcMode mode) =>
             Amatsukaze.Shared.QueueSettingExtensions.IsAnalysisOnly((Amatsukaze.Shared.ProcMode)mode);
+
+        public static bool HasCmAnalysis(this ProcMode mode) =>
+            Amatsukaze.Shared.QueueSettingExtensions.HasCmAnalysis((Amatsukaze.Shared.ProcMode)mode);
+
+        internal static CheckType GetCheckLogType(this ProcMode mode) => mode switch
+        {
+            ProcMode.DrcsCheck => CheckType.DRCS,
+            ProcMode.FilterAdjust => CheckType.TS,
+            _ => CheckType.CM,
+        };
     }
 
     [DataContract]
@@ -1920,7 +1930,8 @@ namespace Amatsukaze.Server
     public enum CheckType
     {
         DRCS, // DRCSサーチ
-        CM    // CM解析
+        CM,   // CM解析
+        TS    // TS解析
     }
 
     [DataContract]
@@ -1953,6 +1964,7 @@ namespace Amatsukaze.Server
             get {
                 if (Type == CheckType.CM) return "CM解析";
                 else if (Type == CheckType.DRCS) return "DRCSチェック";
+                else if (Type == CheckType.TS) return "TS解析";
                 else return "不明";
             }
         }

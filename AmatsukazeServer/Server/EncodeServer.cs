@@ -2119,6 +2119,39 @@ namespace Amatsukaze.Server
             return " --nicojk-program-start " + unixTime.ToString(CultureInfo.InvariantCulture);
         }
 
+        private static void AppendTsAnalysisArgs(StringBuilder sb, ProfileSetting profile, bool loadV2)
+        {
+            string[] decoderNames = new string[] { "default", "QSV", "CUVID" };
+            if (!loadV2)
+            {
+                decoderNames[1] = "default";
+            }
+            if (profile.Mpeg2Decoder != DecoderType.Default)
+            {
+                sb.Append("  --mpeg2decoder ");
+                sb.Append(decoderNames[(int)profile.Mpeg2Decoder]);
+            }
+
+            if (profile.H264Deocder != DecoderType.Default)
+            {
+                sb.Append("  --h264decoder ");
+                sb.Append(decoderNames[(int)profile.H264Deocder]);
+            }
+
+            if (profile.HEVCDecoder != DecoderType.Default)
+            {
+                sb.Append("  --hevcdecoder ");
+                sb.Append(decoderNames[(int)profile.HEVCDecoder]);
+            }
+            if(profile.EnablePmtCut)
+            {
+                sb.Append(" --pmt-cut ")
+                    .Append(profile.PmtCutHeadRate / 100)
+                    .Append(":")
+                    .Append(profile.PmtCutTailRate / 100);
+            }
+        }
+
         internal string MakeAmatsukazeArgs(
             ProcMode mode,
             ProfileSetting profile,
@@ -2150,7 +2183,11 @@ namespace Amatsukaze.Server
                 loadV2 = true;
             }
 
-            if (mode.IsAnalysisOnly())
+            if (mode == ProcMode.FilterAdjust)
+            {
+                sb.Append(" --mode ts_analyze");
+            }
+            else if (mode.HasCmAnalysis())
             {
                 sb.Append(" --mode cm");
             }
@@ -2219,6 +2256,13 @@ namespace Amatsukaze.Server
                 sb.Append(" --subtitles");
             }
             else {
+                AppendTsAnalysisArgs(sb, profile, loadV2);
+                if (mode == ProcMode.FilterAdjust)
+                {
+                    sb.Append(" -w \"").Append(workPath).Append("\" --no-remove-tmp");
+                    return sb.ToString();
+                }
+
                 int outputMask = profile.OutputMask;
                 if (outputMask == 0)
                 {
@@ -2235,7 +2279,7 @@ namespace Amatsukaze.Server
                     .Append(outputMask);
 
 
-                if (mode.IsAnalysisOnly())
+                if (mode.HasCmAnalysis())
                 {
                     sb.Append(" --chapter");
                     // CM解析のみでも、プロファイルでチャプター出力が有効ならチャプターファイルを出力する
@@ -2490,7 +2534,7 @@ namespace Amatsukaze.Server
                         }
 
                     }
-                } // if (!mode.IsAnalysisOnly())
+                } // if (!mode.HasCmAnalysis())
 
                 if (!profile.DisableSubs)
                 {
@@ -2580,28 +2624,6 @@ namespace Amatsukaze.Server
                         .Append("\"");
                 }
 
-                string[] decoderNames = new string[] { "default", "QSV", "CUVID" };
-                if (!loadV2)
-                {
-                    decoderNames[1] = "default";
-                }
-                if (profile.Mpeg2Decoder != DecoderType.Default)
-                {
-                    sb.Append("  --mpeg2decoder ");
-                    sb.Append(decoderNames[(int)profile.Mpeg2Decoder]);
-                }
-
-                if (profile.H264Deocder != DecoderType.Default)
-                {
-                    sb.Append("  --h264decoder ");
-                    sb.Append(decoderNames[(int)profile.H264Deocder]);
-                }
-
-                if (profile.HEVCDecoder != DecoderType.Default)
-                {
-                    sb.Append("  --hevcdecoder ");
-                    sb.Append(decoderNames[(int)profile.HEVCDecoder]);
-                }
                 if (ignoreNoLogo)
                 {
                     sb.Append(" --ignore-no-logo");
@@ -2636,20 +2658,13 @@ namespace Amatsukaze.Server
                         sb.Append(setting.NumParallelLogoAnalysis);
                     }
                 }
-                if (profile.NoRemoveTmp || (mode.IsAnalysisOnly() && mode != ProcMode.CMCheck))
+                if (profile.NoRemoveTmp || mode == ProcMode.TrimAdjust)
                 {
                     sb.Append(" --no-remove-tmp");
                 }
                 if (setting.CopyTrimAVS)
                 {
                     sb.Append(" --copy-trimavs");
-                }
-                if(profile.EnablePmtCut)
-                {
-                    sb.Append(" --pmt-cut ")
-                        .Append(profile.PmtCutHeadRate / 100)
-                        .Append(":")
-                        .Append(profile.PmtCutTailRate / 100);
                 }
                 if (profile.EnableMaxFadeLength)
                 {

@@ -1009,7 +1009,8 @@ namespace Amatsukaze.Server.Rest
                     Children = null
                 }).ToList(),
                 GenreNames = item.Genre?.Select(g => SubGenre.GetDisplayGenre(g)?.FullName ?? SubGenre.GetUnknownFullName(g)).ToList(),
-                CanTrimAdjust = (item.Mode == ProcMode.Batch || item.Mode == ProcMode.AutoBatch || item.Mode.IsAnalysisOnly()) && item.State == QueueState.Complete
+                CanTrimAdjust = item.State == QueueState.Complete && (item.IsBatch || item.Mode.HasCmAnalysis()),
+                CanFilterAdjust = item.State == QueueState.Complete && (item.IsBatch || item.Mode.IsAnalysisOnly())
             };
         }
 
@@ -1023,6 +1024,7 @@ namespace Amatsukaze.Server.Rest
                     switch (item.Mode)
                     {
                         case ProcMode.FilterAdjust:
+                            return "TS解析中→" + (item.ConsoleId + 1);
                         case ProcMode.TrimAdjust:
                         case ProcMode.CMCheck:
                             return "CM解析中→" + (item.ConsoleId + 1);
@@ -1396,7 +1398,7 @@ namespace Amatsukaze.Server.Rest
             {
                 return null;
             }
-            var targetType = item.Mode == ProcMode.DrcsCheck ? CheckType.DRCS : CheckType.CM;
+            var targetType = item.Mode.GetCheckLogType();
             var logs = checkLogItems
                 .Where(x => x != null && x.SrcPath == item.SrcPath && x.Type == targetType)
                 .ToList();
@@ -1412,7 +1414,8 @@ namespace Amatsukaze.Server.Rest
                     return exact;
                 }
             }
-            return logs.OrderByDescending(x => x.CheckStartDate).FirstOrDefault();
+            // フィルタ調整は旧CMモードのログもあるので、時刻が違うTS解析ログへの代替を避ける。
+            return item.Mode == ProcMode.FilterAdjust ? null : logs.OrderByDescending(x => x.CheckStartDate).FirstOrDefault();
         }
 
         private static List<string> ReadLogFileLines(string path)

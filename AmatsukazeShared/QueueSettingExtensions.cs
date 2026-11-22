@@ -15,7 +15,10 @@ namespace Amatsukaze.Shared
         };
 
         public static bool IsAnalysisOnly(this ProcMode mode) =>
-            mode == ProcMode.CMCheck || mode == ProcMode.TrimAdjust || mode == ProcMode.FilterAdjust;
+            mode.HasCmAnalysis() || mode == ProcMode.FilterAdjust;
+
+        public static bool HasCmAnalysis(this ProcMode mode) =>
+            mode == ProcMode.CMCheck || mode == ProcMode.TrimAdjust;
 
         public static IReadOnlyList<int> PriorityList { get; } = new[] { 1, 2, 3, 4, 5 };
 

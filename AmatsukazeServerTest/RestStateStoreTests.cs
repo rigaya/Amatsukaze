@@ -93,6 +93,7 @@ public sealed class RestStateStoreTests
         var dto = Assert.Single(view.Items);
         Assert.Equal(label, dto.StateLabel);
         Assert.Equal(trim, dto.CanTrimAdjust);
+        Assert.Equal(trim, dto.CanFilterAdjust);
         Assert.Equal(active ? 1 : 0, view.Counters.Active);
         Assert.Equal(item.State.ToString(), dto.State);
         Assert.Null(dto.EncodeStart);
@@ -101,30 +102,36 @@ public sealed class RestStateStoreTests
         Assert.Equal(Amatsukaze.Shared.ProcMode.Batch, dto.Mode);
     }
 
-    [Fact]
-    public async Task カット調整モードは完了後に調整可能になる()
+    [Theory]
+    [InlineData(ProcMode.TrimAdjust, true)]
+    [InlineData(ProcMode.CMCheck, true)]
+    [InlineData(ProcMode.FilterAdjust, false)]
+    public async Task 解析タスクのカット調整とフィルタ調整の可否を分ける(ProcMode mode, bool trim)
     {
         var store = new RestStateStore(null!);
         var item = RestQueueTestFixture.Item(1, QueueState.Complete);
-        item.Mode = ProcMode.TrimAdjust;
+        item.Mode = mode;
         await Update(store, UpdateType.Add, item);
         var dto = Assert.Single(store.GetQueueView(null!).Items);
-        Assert.True(dto.CanTrimAdjust);
-        Assert.Equal(Amatsukaze.Shared.ProcMode.TrimAdjust, dto.Mode);
+        Assert.Equal(trim, dto.CanTrimAdjust);
+        Assert.True(dto.CanFilterAdjust);
+        Assert.Equal((Amatsukaze.Shared.ProcMode)mode, dto.Mode);
+        Assert.Equal(trim, item.Mode.HasCmAnalysis());
+        Assert.True(item.Mode.IsAnalysisOnly());
     }
 
     [Fact]
-    public async Task フィルタ調整モードは完了後に調整可能になる()
+    public async Task フィルタ調整の処理中はTS解析を表示する()
     {
         var store = new RestStateStore(null!);
-        var item = RestQueueTestFixture.Item(1, QueueState.Complete);
+        var item = RestQueueTestFixture.Item(1, QueueState.Encoding);
         item.Mode = ProcMode.FilterAdjust;
+        item.ConsoleId = 2;
         await Update(store, UpdateType.Add, item);
         var dto = Assert.Single(store.GetQueueView(null!).Items);
-        Assert.True(dto.CanTrimAdjust);
-        Assert.Equal(Amatsukaze.Shared.ProcMode.FilterAdjust, dto.Mode);
-        Assert.True(item.Mode.IsAnalysisOnly());
-        Assert.Equal("フィルタ調整", Amatsukaze.Shared.QueueSettingExtensions.GetProcModeDisplay(dto.Mode));
+        Assert.Equal("TS解析中→3", dto.StateLabel);
+        Assert.False(dto.CanTrimAdjust);
+        Assert.False(dto.CanFilterAdjust);
     }
 
     [Fact]

@@ -498,6 +498,12 @@ namespace Amatsukaze.Server.Rest
                 return false;
             }
 
+            if (item.Mode == ProcMode.FilterAdjust)
+            {
+                error = "フィルタ調整のタスクからはカット調整を開けません";
+                return false;
+            }
+
             // ログファイルから一時フォルダを取得
             var logPath = state.ResolveTaskLogPathById(request.QueueItemId);
             if (string.IsNullOrEmpty(logPath) || !File.Exists(logPath))

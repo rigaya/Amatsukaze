@@ -355,7 +355,8 @@ namespace Amatsukaze.Server
                         item.FailReason = "このTSのチャンネル設定がありません（追加し直してください）";
                         item.Reset();
                     }
-                    else if (!server.AppData_.setting.LogoPendAsError // ロゴ設定をエラー扱いする場合はここでチェックせず、実際に処理してエラーを発生させる
+                    else if (item.Mode != ProcMode.FilterAdjust &&
+                        !server.AppData_.setting.LogoPendAsError // ロゴ設定をエラー扱いする場合はここでチェックせず、実際に処理してエラーを発生させる
                         && (((!item.Profile.DisableChapter && !item.Profile.NoLogoInCM) || !item.Profile.NoDelogo) &&
                         map[item.ServiceId].LogoSettings.Any(s => s.CanUse(item.TsTime)) == false))
                     {
