@@ -1416,6 +1416,9 @@ namespace Amatsukaze.Server
             return null;
         }
 
+        internal static bool AppliesDeinterlace(FilterSetting filter, bool preview) =>
+            filter.EnableDeinterlace && !(preview && filter.DeinterlaceAlgorithm == DeinterlaceAlgorithm.AutoVfr);
+
         public static string FilterToString(FilterSetting filter, Setting setting, bool overrideBitDepth, bool preview = false)
         {
             StringBuilder sb = new StringBuilder();
@@ -1432,7 +1435,7 @@ namespace Amatsukaze.Server
                 sb.AppendLine("dsrc = AMT_SOURCE");
             }
 
-            if (filter.EnableDeinterlace && !(preview && filter.DeinterlaceAlgorithm == DeinterlaceAlgorithm.AutoVfr))
+            if (AppliesDeinterlace(filter, preview))
             {
                 int videoOutPass = 0;
                 if (filter.DeinterlaceAlgorithm == DeinterlaceAlgorithm.D3DVP)

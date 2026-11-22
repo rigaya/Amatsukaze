@@ -256,13 +256,16 @@ namespace Amatsukaze.Server.Rest
                 profile.QSVEncFilterOption = request.QSVEncFilterOption;
                 profile.NVEncFilterOption = request.NVEncFilterOption;
                 profile.VCEEncFilterOption = request.VCEEncFilterOption;
-                var cmd = new Dictionary<string, object> { ["cmd"] = "config", ["sarnum"] = session.Format.SarWidth > 0 && session.Format.SarHeight > 0 ? session.Format.SarWidth : 0, ["sarden"] = session.Format.SarWidth > 0 && session.Format.SarHeight > 0 ? session.Format.SarHeight : 0, ["interlace"] = session.Format.Progressive != 0 ? "progressive" : "tff" };
+                string interlace = session.Format.Progressive != 0 ? "progressive" : "tff";
+                var cmd = new Dictionary<string, object> { ["cmd"] = "config", ["sarnum"] = session.Format.SarWidth > 0 && session.Format.SarHeight > 0 ? session.Format.SarWidth : 0, ["sarden"] = session.Format.SarWidth > 0 && session.Format.SarHeight > 0 ? session.Format.SarHeight : 0, ["interlace"] = interlace };
                 if (profile.FilterOption == FilterOption.None || profile.FilterOption == FilterOption.Setting)
                 {
                     var filter = profile.FilterOption == FilterOption.None ? new FilterSetting() : profile.FilterSetting;
                     var path = Path.Combine(session.WorkDirectory, "preview_" + request.Gen + ".avs");
                     FilterPreviewScripts.WriteScript(path, FilterPreviewScripts.Preview(session.ModuleDirectory, session.Dat, session.WorkDirectory, filter, session.Setting, 0));
                     cmd["kind"] = "avs"; cmd["path"] = path;
+                    // 実際に生成するプレビュー用スクリプトのインタレ解除有無を伝える。
+                    cmd["afterInterlace"] = AvsScriptCreator.AppliesDeinterlace(filter, preview: true) ? "progressive" : interlace;
                 }
                 else
                 {
