@@ -343,14 +343,23 @@ namespace Amatsukaze.Server.Rest
             });
             app.UseCors("LocalCors");
 
-            app.UseBlazorFrameworkFiles();
-            app.UseDefaultFiles();
-            app.UseStaticFiles();
-
             MapEndpoints(app);
-            app.MapFallbackToFile("index.html");
+            ConfigureWebUiFiles(app);
 
             return app;
+        }
+
+        internal static void ConfigureWebUiFiles(WebApplication app)
+        {
+            // Blazor標準の配信は、事前圧縮版を含む _framework に再検証を付ける。
+            app.UseBlazorFrameworkFiles();
+            app.UseDefaultFiles();
+            var revalidate = new StaticFileOptions
+            {
+                OnPrepareResponse = file => file.Context.Response.Headers.CacheControl = "no-cache",
+            };
+            app.UseStaticFiles(revalidate);
+            app.MapFallbackToFile("index.html", revalidate);
         }
 
         public async Task StopAsync(CancellationToken cancellationToken = default)

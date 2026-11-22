@@ -66,7 +66,8 @@ public partial class FilterAdjust
     {
         try
         {
-            _renderer = await JS.InvokeAsync<IJSObjectReference>("import", "./js/filterPreview.js");
+            // 再検証なしで保存された旧モジュールを、更新後の初回から使わない。
+            _renderer = await JS.InvokeAsync<IJSObjectReference>("import", "./js/filterPreview.js?v=2");
             _lifecycle = await JS.InvokeAsync<IJSObjectReference>("import", "./js/filterPreviewSession.js");
             _viewerModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/filterPreviewViewer.js");
             _callback = DotNetObjectReference.Create(this);
