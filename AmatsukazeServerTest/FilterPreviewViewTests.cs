@@ -40,7 +40,10 @@ public class FilterPreviewViewTests
         await using var body = await response.Content.ReadAsStreamAsync();
         // 確定応答の送信前に画像まで読めることを確認する。全体を貯める実装ではここで停止する。
         await AssertRecordAsync(body, early);
-        var final = Peer.View(id, 1, 2, provisional: false, [4, 5, 6]);
+        var confirmed = Peer.View(id, 1, 2, provisional: false, [], reuse: true);
+        await peer.SendAsync(confirmed);
+        await AssertRecordAsync(body, confirmed);
+        var final = Peer.View(id, 1, 3, provisional: false, [4, 5, 6]);
         var done = Encoding.UTF8.GetBytes($"AMTPREVIEW DONE id={id} gen=1 status=ok\n");
         await peer.SendAsync(final);
         await peer.SendAsync(done);
@@ -196,11 +199,13 @@ public class FilterPreviewViewTests
         }
         public void Dispose() => Engine.Dispose();
 
-        public static byte[] View(long id, long gen, long revision, bool provisional, byte[] bytes)
+        public static byte[] View(long id, long gen, long revision, bool provisional, byte[] bytes, bool reuse = false)
         {
+            object frame = reuse ? new { side = "after", bytes = bytes.Length, provisional, reuse = true }
+                : new { side = "after", bytes = bytes.Length, provisional };
             var meta = JsonSerializer.SerializeToUtf8Bytes(new
             {
-                frames = new[] { new { side = "after", bytes = bytes.Length, provisional } },
+                frames = new[] { frame },
             });
             var header = Encoding.UTF8.GetBytes($"AMTPREVIEW VIEW id={id} gen={gen} revision={revision} metaBytes={meta.Length} bytes={bytes.Length}\n");
             return [.. header, .. meta, .. bytes];

@@ -136,16 +136,23 @@ namespace Amatsukaze.Server.Rest
         private static void ValidateFrameLengths(byte[] metadata, int bytes)
         {
             using var document = JsonDocument.Parse(metadata);
-            if (!document.RootElement.TryGetProperty("frames", out var frames) ||
+            if (document.RootElement.ValueKind != JsonValueKind.Object ||
+                !document.RootElement.TryGetProperty("frames", out var frames) ||
                 frames.ValueKind != JsonValueKind.Array || frames.GetArrayLength() > 2)
                 throw new IOException("表示応答の画像一覧が不正です");
             int sides = 0;
             int remaining = bytes;
             foreach (var frame in frames.EnumerateArray())
             {
-                int side = frame.GetProperty("side").GetString() switch { "before" => 1, "after" => 2, _ => 0 };
-                int length = frame.GetProperty("bytes").GetInt32();
-                if (side == 0 || (sides & side) != 0 || length <= 0 || length > remaining)
+                if (frame.ValueKind != JsonValueKind.Object ||
+                    !frame.TryGetProperty("side", out var sideValue) || sideValue.ValueKind != JsonValueKind.String ||
+                    !frame.TryGetProperty("bytes", out var lengthValue) || lengthValue.ValueKind != JsonValueKind.Number ||
+                    !lengthValue.TryGetInt32(out int length))
+                    throw new IOException("表示応答の画像境界が不正です");
+                int side = sideValue.GetString() switch { "before" => 1, "after" => 2, _ => 0 };
+                bool reuse = frame.TryGetProperty("reuse", out var reuseValue);
+                if (side == 0 || (sides & side) != 0 || length > remaining ||
+                    (reuse ? reuseValue.ValueKind != JsonValueKind.True || length != 0 : length <= 0))
                     throw new IOException("表示応答の画像境界が不正です");
                 sides |= side;
                 remaining -= length;

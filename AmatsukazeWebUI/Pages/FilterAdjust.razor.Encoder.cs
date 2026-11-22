@@ -114,6 +114,8 @@ public partial class FilterAdjust
                 using var response = await Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, token);
                 await CheckAsync(response, token);
                 using var stream = new BufferedStream(await response.Content.ReadAsStreamAsync(token), MaxViewHeaderBytes);
+                // 応答内で転送済みの画像を記録し、実際に描画できたかも区別する。
+                var receivedSides = new Dictionary<string, ReceivedEncoderFrame>(StringComparer.Ordinal);
                 long? requestId = null;
                 long lastRevision = -1;
                 while (Current())
@@ -144,7 +146,8 @@ public partial class FilterAdjust
                     await stream.ReadExactlyAsync(metaBytes, token);
                     var packet = JsonSerializer.Deserialize<EncoderView>(metaBytes, ViewRequestJson)
                         ?? throw new InvalidDataException("表示応答のメタデータがありません");
-                    await DrawEncoderViewAsync(packet, stream, payloadSize, frameOptions, Current, token);
+                    await DrawEncoderViewAsync(packet, stream, payloadSize, frameOptions, receivedSides,
+                        operation.Op != "snapshot", Current, token);
                 }
                 token.ThrowIfCancellationRequested();
                 return "superseded";
@@ -161,10 +164,11 @@ public partial class FilterAdjust
 
     private sealed record EncoderView(double CurrentSeconds, double? DurationSeconds, string DisplayMode, EncoderViewFrame[] Frames);
     private sealed record EncoderViewFrame(string Side, string Format, int Width, int Height, int Bytes, int[]? Pitches,
-        int Sarnum, int Sarden, string? Matrix, string? Range, string? Primaries, string? Transfer, string? Chromaloc);
+        int Sarnum, int Sarden, string? Matrix, string? Range, string? Primaries, string? Transfer, string? Chromaloc, bool Reuse);
+    private sealed record ReceivedEncoderFrame(EncoderViewFrame Frame, bool Drawn);
 
     private async Task DrawEncoderViewAsync(EncoderView packet, Stream stream, int payloadSize,
-        FrameOptions options, Func<bool> current, CancellationToken token)
+        FrameOptions options, Dictionary<string, ReceivedEncoderFrame> receivedSides, bool allowReuse, Func<bool> current, CancellationToken token)
     {
         string view = packet.DisplayMode switch
         {
@@ -175,8 +179,9 @@ public partial class FilterAdjust
             || packet.CurrentSeconds >= TimeSpan.MaxValue.TotalSeconds
             || packet.DurationSeconds is double duration && (!double.IsFinite(duration) || duration < 0 || duration >= TimeSpan.MaxValue.TotalSeconds)
             || packet.Frames is null || packet.Frames.Length > 2
-            || packet.Frames.Any(f => f is null || f.Format is null || f.Bytes <= 0 || f.Width <= 0 || f.Height <= 0
-                || f.Side is not ("before" or "after") || (view != "compare" && f.Side != view))
+            || packet.Frames.Any(f => f is null || f.Side is not ("before" or "after") || (view != "compare" && f.Side != view)
+                || (f.Reuse ? !allowReuse || f.Bytes != 0 || !receivedSides.ContainsKey(f.Side)
+                    : f.Format is null || f.Width <= 0 || f.Height <= 0 || f.Bytes <= 0))
             || packet.Frames.Select(f => f.Side).Distinct().Count() != packet.Frames.Length
             || packet.Frames.Sum(f => (long)f.Bytes) != payloadSize)
             throw new InvalidDataException("表示画像のメタデータが不正です");
@@ -184,6 +189,7 @@ public partial class FilterAdjust
         var images = new List<(EncoderViewFrame Frame, byte[] Bytes)>(packet.Frames.Length);
         foreach (var frame in packet.Frames)
         {
+            if (frame.Reuse) continue;
             var bytes = new byte[frame.Bytes];
             await stream.ReadExactlyAsync(bytes, token);
             images.Add((frame, bytes));
@@ -192,11 +198,13 @@ public partial class FilterAdjust
         _hasEncoderView = true;
         _encoderSeconds = packet.CurrentSeconds;
         _encoderDurationSeconds = packet.DurationSeconds;
-        var after = packet.Frames.FirstOrDefault(f => f.Side == "after");
-        var before = packet.Frames.FirstOrDefault(f => f.Side == "before");
         foreach (var (frame, bytes) in images)
         {
-            if (_pngFallback && options.Format == "yuv") continue;
+            if (_pngFallback && options.Format == "yuv")
+            {
+                receivedSides[frame.Side] = new(frame, false);
+                continue;
+            }
             var metadata = new Dictionary<string, string?>
             {
                 ["format"] = frame.Format, ["width"] = frame.Width.ToString(CultureInfo.InvariantCulture),
@@ -210,15 +218,20 @@ public partial class FilterAdjust
             if (!current()) return;
             if (!success && options.Format == "yuv") _pngFallback = true;
             else if (!success) throw new InvalidOperationException("画像を描画できません");
+            receivedSides[frame.Side] = new(frame, success);
         }
         if (!current()) return;
 
-        // 片側だけ届いた比較や空の表示更新では、該当する古い画像を消す。
-        if (after == null) await _renderer!.InvokeVoidAsync("clear", _afterCanvas);
+        // 表示から消えた側は再利用元からも外し、描画できなかった側に古い画像を残さない。
+        if (!packet.Frames.Any(f => f.Side == "after")) receivedSides.Remove("after");
+        if (!packet.Frames.Any(f => f.Side == "before")) receivedSides.Remove("before");
+        var after = receivedSides.GetValueOrDefault("after");
+        var before = receivedSides.GetValueOrDefault("before");
+        if (after?.Drawn != true) await _renderer!.InvokeVoidAsync("clear", _afterCanvas);
         if (!current()) return;
-        if (before == null) await _renderer!.InvokeVoidAsync("clear", _beforeCanvas);
+        if (before?.Drawn != true) await _renderer!.InvokeVoidAsync("clear", _beforeCanvas);
         if (!current()) return;
-        if ((after ?? before) is { } display)
+        if ((after ?? before)?.Frame is { } display)
         {
             double height = options.Crop?[3] ?? (double)display.Height * options.Scale;
             double sar = display.Sarnum > 0 && display.Sarden > 0 ? (double)display.Sarnum / display.Sarden : 1;
