@@ -194,6 +194,12 @@ export function invalidate(canvas) {
     return revision;
 }
 
+// 表示更新で届かなかった側は、描画待ちの画像も含めて消す。
+export function clear(canvas) {
+    invalidate(canvas);
+    canvas.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
+}
+
 export function contextLost(canvas) {
     const state = renderers.get(canvas);
     return !!state && (state.lost || !state.gl || state.gl.isContextLost());

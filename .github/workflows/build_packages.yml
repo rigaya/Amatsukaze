@@ -158,8 +158,8 @@ jobs:
         run: |
           mkdir -p parts/hwenc_vpp_preview
           curl -fL --retry 3 \
-            "https://github.com/rigaya/HWEncVppPreview/releases/download/0.01/HWEncVppPreviewCLI_0.01_linux-x64.tar.xz" \
-            -o "parts/hwenc_vpp_preview/HWEncVppPreviewCLI_0.01_linux-x64.tar.xz"
+            "https://github.com/rigaya/HWEncVppPreview/releases/download/0.02/HWEncVppPreviewCLI_0.02_linux-x64.tar.xz" \
+            -o "parts/hwenc_vpp_preview/HWEncVppPreviewCLI_0.02_linux-x64.tar.xz"
 
       - name: Create package
         id: create_pkg
@@ -185,8 +185,9 @@ jobs:
           install -m 755 nicojk_ass_x/nicojk_ass pkg/exe_files/nicojk_ass
           # フィルタプレビューのCLIエンジン(単一実行ファイル)はサーバーと同じ場所へ置く
           mkdir -p pkg/exe_files
-          tar -xJf parts/hwenc_vpp_preview/HWEncVppPreviewCLI_0.01_linux-x64.tar.xz -C pkg/exe_files HWEncVppPreviewCLI
+          tar -xJf parts/hwenc_vpp_preview/HWEncVppPreviewCLI_0.02_linux-x64.tar.xz -C pkg/exe_files HWEncVppPreviewCLI
           test -x pkg/exe_files/HWEncVppPreviewCLI
+          python3 scripts/check_filter_preview_engine.py pkg/exe_files/HWEncVppPreviewCLI
           docker pull "ghcr.io/${{ github.repository_owner }}/amatsukaze-builder:ubuntu2004"
           docker run --rm \
             -v "${{ github.workspace }}:/work" \

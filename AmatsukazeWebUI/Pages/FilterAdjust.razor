@@ -45,10 +45,13 @@
             <button type="button" class="@(_quality == "jpeg" ? "is-active" : "")" aria-pressed="@(_quality == "jpeg")"
                     disabled="@(!CanOperate)" @onclick="@(() => SetQualityAsync("jpeg"))" title="回線が細い場合に使います。細かな差は見えにくくなります">JPEG</button>
         </div>
-        <label class="fa-switch" title="KFMの間引きで残るフレームだけをコマ送りします">
-            <input type="checkbox" @bind="_decimate" @bind:after="RefreshAsync" disabled="@(!CanOperate)" />
-            <span>間引き後で送る</span>
-        </label>
+        @if (!IsEncoder)
+        {
+            <label class="fa-switch" title="KFMの間引きで残るフレームだけをコマ送りします">
+                <input type="checkbox" @bind="_decimate" @bind:after="RefreshAsync" disabled="@(!CanOperate)" />
+                <span>間引き後で送る</span>
+            </label>
+        }
         @* 試験はrole=statusの文言で同期するため、エラーは別の要素に出す *@
         <div class="fa-status">
             @if (_busy) { <span class="fa-spinner" aria-hidden="true"></span> }
@@ -94,20 +97,43 @@
                 }
             </div>
 
-            @* シークバーと位置の表示。KFMのときは60fps基準のフレーム番号 *@
             <div class="fa-transport">
-                <input class="fa-seek" type="range" min="0" max="@MaxFrame" value="@_position"
-                       @oninput="SeekAsync" disabled="@(!CanOperate)" aria-label="シーク" />
+                @if (IsEncoder)
+                {
+                    <input class="fa-seek" type="range" min="0" max="@FormatSeconds(_encoderDurationSeconds ?? 0)" step="any"
+                           value="@EncoderSeekValue" @oninput='e => SeekEncoderAsync(e, "drag")' @onchange='e => SeekEncoderAsync(e, "commit")'
+                           disabled="@(!CanOperate || _encoderDurationSeconds is not > 0)" aria-label="シーク" />
+                }
+                else
+                {
+                    <input class="fa-seek" type="range" min="0" max="@MaxFrame" value="@_position"
+                           @oninput="SeekAsync" disabled="@(!CanOperate)" aria-label="シーク" />
+                }
                 <div class="fa-transport-row">
                     <button type="button" class="fa-btn fa-btn-step" @onclick="() => StepAsync(-1)"
-                            disabled="@(!CanOperate || _position <= 0)" title="前のコマ (←)" aria-label="前のコマ">&#x25C0;</button>
-                    <input class="fa-frame-input" type="number" min="0" max="@MaxFrame" value="@_position"
-                           @onchange="SeekAsync" disabled="@(!CanOperate)" aria-label="フレーム番号" />
-                    <span class="fa-muted">/ @MaxFrame</span>
+                            disabled="@(!CanStep(-1))" title="前のコマ (←)" aria-label="前のコマ">&#x25C0;</button>
+                    @if (IsEncoder)
+                    {
+                        <input class="fa-time-input" type="number" min="0" step="any" value="@EncoderSeekValue"
+                               @onchange='e => SeekEncoderAsync(e, "commit")' disabled="@(!CanOperate)" aria-label="時刻(秒)" />
+                        @if (_encoderDurationSeconds is double length)
+                        {
+                            <span class="fa-muted">/ @FormatTime(length)</span>
+                        }
+                    }
+                    else
+                    {
+                        <input class="fa-frame-input" type="number" min="0" max="@MaxFrame" value="@_position"
+                               @onchange="SeekAsync" disabled="@(!CanOperate)" aria-label="フレーム番号" />
+                        <span class="fa-muted">/ @MaxFrame</span>
+                    }
                     <button type="button" class="fa-btn fa-btn-step" @onclick="() => StepAsync(1)"
-                            disabled="@(!CanOperate || _position >= MaxFrame)" title="次のコマ (→)" aria-label="次のコマ">&#x25B6;</button>
-                    <span class="fa-chip" title="先頭からの時間">@(TimeSpan.FromSeconds(_fps > 0 ? _position / _fps : 0).ToString(@"h\:mm\:ss\.fff", CultureInfo.InvariantCulture))</span>
-                    <span class="fa-chip">@FpsLabel</span>
+                            disabled="@(!CanStep(1))" title="次のコマ (→)" aria-label="次のコマ">&#x25B6;</button>
+                    <span class="fa-chip" title="先頭からの時間">@(IsEncoder ? FormatTime(_encoderSeconds) : TimeSpan.FromSeconds(_fps > 0 ? _position / _fps : 0).ToString(@"h\:mm\:ss\.fff", CultureInfo.InvariantCulture))</span>
+                    @if (!IsEncoder)
+                    {
+                        <span class="fa-chip">@FpsLabel</span>
+                    }
                     @if (!string.IsNullOrEmpty(FrameTypeLabel))
                     {
                         <span class="fa-chip fa-chip-accent" title="KFMの判定した画種と、60fps単位の表示の長さ">@FrameTypeLabel</span>
@@ -144,11 +170,10 @@
                 {
                     <div class="fa-notice">このプロファイルはカスタムフィルタのため、プレビューでは「フィルタなし」で開いています。種類を選び直さずに「プロファイルへ保存」すると、カスタムフィルタの指定は残します。</div>
                 }
-                @if (IsEncoder)
+                @if (!IsEncoder)
                 {
-                    <div class="fa-notice">コマ送りはソースのフレーム番号基準です。bobやdecimateなどでfpsが変わるフィルタでは、出力フレームを飛ばす場合があります。</div>
+                    <div class="fa-notice is-info">プレビューは近似です。KFMの判定は本番の多パス処理と異なる場合があります。</div>
                 }
-                <div class="fa-notice is-info">プレビューは近似です。KFMの判定は本番の多パス処理と異なる場合があります。</div>
             </div>
 
             <details class="fa-log" @ontoggle="LoadLogsAsync">

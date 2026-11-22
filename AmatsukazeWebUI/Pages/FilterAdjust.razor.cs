@@ -41,9 +41,9 @@ public partial class FilterAdjust
     private bool DecimateInfoMissing, _reopening;
     private bool CustomReplaced;
     private int MaxFrame => Math.Max(0, _frames - 1);
-    private bool CanOperate => !_disposed && !_expired && _sessionId != null && _frames > 0;
+    private bool CanOperate => !_disposed && !_expired && _sessionId != null && (IsEncoder ? _width > 0 : _frames > 0);
     private bool _busy => _reopening || _configurationCancellation != null || _frameCancellation != null || _seeking;
-    private bool Ready => !_disposed && !_expired && _sessionId != null && _frames > 0 && _generation == _committedGeneration;
+    private bool Ready => CanOperate && _generation == _committedGeneration;
     private string SessionUrl => $"{Root}/{_sessionId}";
     private string FilterKind => Node(_profile, "FilterOption")?.ToString() ?? "None";
     private bool IsEncoder => FilterKind.EndsWith("EncFilter", StringComparison.Ordinal);
@@ -162,16 +162,33 @@ public partial class FilterAdjust
             var result = await ReadJsonAsync(response, token);
             if (gen != _generation || _disposed) return;
             var info = Node(result, "info") as JsonObject ?? throw new InvalidOperationException("映像情報がありません");
-            var seconds = _fps > 0 ? _position / _fps : 0;
             int num = Number(info, "fpsnum"), den = Number(info, "fpsden", 1);
-            _fps = num > 0 && den > 0 ? (double)num / den : _fps;
-            _frames = Number(info, "frames");
+            if (IsEncoder)
+            {
+                if (Node(info, "kind")?.ToString() != "encoder")
+                    throw new InvalidOperationException("エンコーダの時刻情報を取得できません");
+                _encoderDurationSeconds = double.TryParse(Node(info, "durationSeconds")?.ToString(), NumberStyles.Float,
+                    CultureInfo.InvariantCulture, out var duration) && double.IsFinite(duration) && duration >= 0 && duration < TimeSpan.MaxValue.TotalSeconds ? duration : null;
+                _hasEncoderView = false;
+                _encoderBoundary = null;
+                FrameTypeLabel = "";
+                FrameKept = null;
+                DecimateInfoMissing = false;
+            }
+            else
+            {
+                var seconds = _fps > 0 ? _position / _fps : 0;
+                _fps = num > 0 && den > 0 ? (double)num / den : _fps;
+                _frames = Number(info, "frames");
+                _position = Math.Clamp((int)Math.Round(seconds * _fps), 0, Math.Max(0, _frames - 1));
+            }
             _width = Number(info, "width"); _height = Number(info, "height");
-            _position = Math.Clamp((int)Math.Round(seconds * _fps), 0, Math.Max(0, _frames - 1));
             _notices = (Node(result, "notices") as JsonArray)?.Select(x => x?.ToString() ?? "").ToArray() ?? [];
             _committedGeneration = gen;
             await ReadInputAspectAsync(info, gen, token);
-            await RefreshAsync();
+            if (gen != _generation || token.IsCancellationRequested) return;
+            if (IsEncoder) await RestoreEncoderPresentationAsync();
+            else await RefreshAsync();
             await LoadLogsAsync();
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
@@ -200,9 +217,10 @@ public partial class FilterAdjust
         if (width <= 0 || height <= 0) throw new InvalidOperationException("入力映像の表示アスペクト比を取得できません");
         _inputDar = (double)width / height * (numerator > 0 && denominator > 0 ? (double)numerator / denominator : 1);
     }
-    private Task RefreshAsync() => StartFrameAsync(null);
+    private Task RefreshAsync() => IsEncoder ? RefreshEncoderAsync() : StartFrameAsync(null);
     private Task StepAsync(int direction)
     {
+        if (IsEncoder) return StartEncoderViewAsync(new("step", Direction: direction < 0 ? "previous" : "next"));
         if (CanOperate && !Ready)
         {
             _position = Math.Clamp(_position + direction, 0, MaxFrame);
@@ -212,18 +230,23 @@ public partial class FilterAdjust
     }
     [JSInvokable] public Task StepPreviewAsync(int direction) => InvokeAsync(async () =>
     {
-        if (!CanOperate || direction is not (-1 or 1) || _position + direction < 0 || _position + direction > MaxFrame) return;
+        if (direction is not (-1 or 1) || !CanStep(direction)) return;
         await StepAsync(direction);
         if (!_disposed) StateHasChanged();
     });
-    private Task SetViewAsync(string value) { _view = value; return RefreshAsync(); }
+    private Task SetViewAsync(string value)
+    {
+        _view = value;
+        return IsEncoder ? StartEncoderViewAsync(new("display", Mode: EncoderDisplayMode)) : RefreshAsync();
+    }
     private Task SetScaleAsync(string value) { _scale = value; return RefreshAsync(); }
     private Task SetQualityAsync(string value) { _quality = value; return QualityChangedAsync(); }
     private async Task OnKeyDown(KeyboardEventArgs e)
     {
         if (e.Key is not ("ArrowLeft" or "ArrowRight") || !CanOperate || _lifecycle == null) return;
         if (await _lifecycle.InvokeAsync<bool>("inputFocused")) return;
-        await StepAsync(e.Key == "ArrowLeft" ? -1 : 1);
+        int direction = e.Key == "ArrowLeft" ? -1 : 1;
+        if (!IsEncoder || CanStep(direction)) await StepAsync(direction);
     }
     private Task SeekAsync(ChangeEventArgs e)
     {
@@ -393,8 +416,14 @@ public partial class FilterAdjust
     [JSInvokable] public async Task OnPreviewContextLost()
     {
         if (_disposed) return;
-        _pngFallback = true;
-        await InvokeAsync(async () => { await RefreshAsync(); StateHasChanged(); });
+        await InvokeAsync(async () =>
+        {
+            _pngFallback = true;
+            // 受信中の操作の確定を待ってから、その表示だけをPNGで取得する。
+            if (IsEncoder && _frameCancellation != null) return;
+            await RefreshAsync();
+            if (!_disposed) StateHasChanged();
+        });
     }
     private async Task QualityChangedAsync()
     {

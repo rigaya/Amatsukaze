@@ -1994,6 +1994,40 @@ namespace Amatsukaze.Server.Rest
                 catch (KeyNotFoundException) { return Results.NotFound(); }
                 catch (Exception ex) when (ex is ArgumentException || ex is IOException || ex is InvalidOperationException) { return Results.BadRequest(new { message = ex.Message }); }
             });
+            app.MapPost("/api/filter-preview/sessions/{sessionId}/view", async (HttpContext context, string sessionId) =>
+            {
+                try
+                {
+                    var data = await context.Request.ReadFromJsonAsync<FilterPreviewViewRequest>(context.RequestAborted);
+                    if (data == null)
+                    {
+                        context.Response.StatusCode = StatusCodes.Status400BadRequest;
+                        return;
+                    }
+                    await FilterPreviewViewEndpoint.WriteAsync(context, (deliver, token) =>
+                        filterPreview.StreamViewAsync(sessionId, data, deliver, token));
+                }
+                catch (OperationCanceledException)
+                {
+                    if (!context.RequestAborted.IsCancellationRequested && !context.Response.HasStarted)
+                        context.Response.StatusCode = StatusCodes.Status409Conflict;
+                    else
+                        context.Abort();
+                }
+                catch (KeyNotFoundException) when (!context.Response.HasStarted)
+                {
+                    context.Response.StatusCode = StatusCodes.Status404NotFound;
+                }
+                catch (Exception ex) when (ex is ArgumentException || ex is IOException || ex is InvalidOperationException || ex is JsonException)
+                {
+                    if (context.Response.HasStarted) context.Abort();
+                    else
+                    {
+                        context.Response.StatusCode = StatusCodes.Status400BadRequest;
+                        await context.Response.WriteAsJsonAsync(new { message = ex.Message }, context.RequestAborted);
+                    }
+                }
+            });
             app.MapPost("/api/filter-preview/sessions/{sessionId}/save", async (HttpContext context, string sessionId) =>
             {
                 var data = await context.Request.ReadFromJsonAsync<FilterPreviewSaveRequest>();

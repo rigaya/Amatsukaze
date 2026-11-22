@@ -14,7 +14,7 @@ public class FilterPreviewEngineTests
     public async Task エラー本文のidとgenを応答の識別子として扱わない()
     {
         using var engine = StartEngine(
-            "printf 'AMTPREVIEW READY version=1\\n'; read line; printf 'AMTPREVIEW INFO gen=1 frames=4\\n'; read line; printf 'AMTPREVIEW ERROR id=1 gen=1 message=外部ログ id=99 gen=88 rc=-55\\n'; read line");
+            "printf 'AMTPREVIEW READY version=2\\n'; read line; printf 'AMTPREVIEW INFO gen=1 frames=4\\n'; read line; printf 'AMTPREVIEW ERROR id=1 gen=1 message=外部ログ id=99 gen=88 rc=-55\\n'; read line");
         _ = await engine.RequestAsync(new Dictionary<string, object> { ["cmd"] = "config" }, 1, false, CancellationToken.None);
         var error = await Record.ExceptionAsync(() => engine.RequestAsync(
             new Dictionary<string, object> { ["cmd"] = "frame" }, 1, true, CancellationToken.None));
@@ -25,7 +25,7 @@ public class FilterPreviewEngineTests
     [LinuxFact]
     public async Task 対応しないREADYの版は起動失敗として返す()
     {
-        using var engine = StartEngine("printf 'AMTPREVIEW READY version=2\\n'; read line");
+        using var engine = StartEngine("printf 'AMTPREVIEW READY version=3\\n'; read line");
         var error = await Record.ExceptionAsync(() => engine.WaitReadyAsync(CancellationToken.None));
         Assert.IsType<System.IO.IOException>(error);
         Assert.Contains("バージョン", error.Message);
@@ -34,7 +34,7 @@ public class FilterPreviewEngineTests
     [LinuxFact]
     public async Task 偽エンジンのヘッダとバイナリを続けて受信できる()
     {
-        const string script = "printf 'AMTPREVIEW READY version=1\\n'; read line; printf 'AMTPREVIEW INFO gen=1 frames=4\\n'; read line; printf 'AMTPREVIEW FRAME id=1 gen=1 bytes=4 width=2 height=2\\nABCD'; read line";
+        const string script = "printf 'AMTPREVIEW READY version=2\\n'; read line; printf 'AMTPREVIEW INFO gen=1 frames=4\\n'; read line; printf 'AMTPREVIEW FRAME id=1 gen=1 bytes=4 width=2 height=2\\nABCD'; read line";
         using var engine = StartEngine(script);
         var info = await engine.RequestAsync(new Dictionary<string, object> { ["cmd"] = "config" }, 1, false, CancellationToken.None);
         var frame = await engine.RequestAsync(new Dictionary<string, object> { ["cmd"] = "frame" }, 1, true, CancellationToken.None);
@@ -46,7 +46,7 @@ public class FilterPreviewEngineTests
     public async Task 新しい設定は古い設定の待機を解除する()
     {
         const string script = """
-            printf 'AMTPREVIEW READY version=1\n'
+            printf 'AMTPREVIEW READY version=2\n'
             read first
             read second
             case "$first" in *'"gen":1'*) ;; *) exit 1;; esac
@@ -71,7 +71,7 @@ public class FilterPreviewEngineTests
     [LinuxFact]
     public async Task 呼出前に取り消された要求は取消として終了する()
     {
-        const string script = "printf 'AMTPREVIEW READY version=1\\n'; read line";
+        const string script = "printf 'AMTPREVIEW READY version=2\\n'; read line";
         using var engine = StartEngine(script);
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();

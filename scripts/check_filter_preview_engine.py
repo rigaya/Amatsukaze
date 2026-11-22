@@ -17,10 +17,10 @@ def main():
             input=b'{"cmd":"quit"}\n', capture_output=True, timeout=30,
         )
     lines = result.stdout.decode("utf-8-sig", errors="replace").splitlines()
-    if result.returncode != 0 or not lines or lines[0] != "AMTPREVIEW READY version=1":
+    if result.returncode != 0 or not lines or lines[0] != "AMTPREVIEW READY version=2":
         raise RuntimeError("プレビューエンジンの起動またはプロトコル確認に失敗しました: "
                            + repr(lines[:1]) + " " + result.stderr.decode("utf-8", errors="replace"))
-    print("フィルタプレビューエンジンの起動・READY version=1確認:成功")
+    print("フィルタプレビューエンジンの起動・READY version=2確認:成功")
 
 
 if __name__ == "__main__":

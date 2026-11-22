@@ -40,6 +40,50 @@ namespace Amatsukaze.Server.Rest
         public bool Decimate { get; set; } = true;
     }
 
+    public sealed class FilterPreviewViewRequest
+    {
+        public long Gen { get; set; }
+        public string Op { get; set; }
+        public double? Seconds { get; set; }
+        public string Phase { get; set; }
+        public string Direction { get; set; }
+        public string Mode { get; set; }
+        public long? Revision { get; set; }
+        public int Scale { get; set; } = 1;
+        public string Format { get; set; } = "yuv";
+        public int[] Crop { get; set; }
+
+        internal Dictionary<string, object> ToCommand()
+        {
+            if (Scale is < 1 or > 16 || Format is not ("yuv" or "jpeg" or "png")
+                || Crop != null && (Crop.Length != 4 || Crop[0] < 0 || Crop[1] < 0 || Crop[2] <= 0 || Crop[3] <= 0))
+                throw new ArgumentException("表示画像の転送形式が不正です");
+
+            var command = new Dictionary<string, object> { ["op"] = Op, ["scale"] = Scale, ["format"] = Format };
+            if (Crop != null) command["crop"] = Crop;
+            switch (Op)
+            {
+                case "seek" when Seconds is double seconds && double.IsFinite(seconds) && seconds >= 0
+                    && Phase is null or "drag" or "commit":
+                    command["seconds"] = seconds;
+                    if (Phase != null) command["phase"] = Phase;
+                    break;
+                case "step" when Direction is "previous" or "next":
+                    command["direction"] = Direction;
+                    break;
+                case "display" when Mode is "after" or "before" or "split" or "sideBySide":
+                    command["mode"] = Mode;
+                    break;
+                case "snapshot" when Revision is null or >= 0:
+                    if (Revision.HasValue) command["revision"] = Revision.Value;
+                    break;
+                default:
+                    throw new ArgumentException("表示操作が不正です");
+            }
+            return command;
+        }
+    }
+
     public sealed class FilterPreviewService : IDisposable
     {
         private sealed class Session : IDisposable
@@ -255,7 +299,9 @@ namespace Amatsukaze.Server.Rest
         public async Task<FilterPreviewEngine.Reply> FrameAsync(string id, FilterPreviewFrameRequest request, CancellationToken cancellation)
         {
             var session = Get(id);
-            if (request.Gen != session.Generation) throw new ArgumentException("設定の世代が一致しません");
+            await session.ConfigLock.WaitAsync(cancellation).ConfigureAwait(false);
+            try { ValidateKind(session, request.Gen, encoder: false); }
+            finally { session.ConfigLock.Release(); }
             if (request.Pos < 0 || (request.Side != "before" && request.Side != "after") || request.Scale < 1 || request.Scale > 16 || (request.Format != "yuv" && request.Format != "jpeg" && request.Format != "png") || (request.Crop != null && request.Crop.Length != 4) || (request.Step.HasValue && request.Step != -1 && request.Step != 1)) throw new ArgumentException("フレーム要求が不正です");
             var cmd = new Dictionary<string, object> { ["cmd"] = "frame", ["pos"] = request.Pos, ["side"] = request.Side, ["scale"] = request.Scale, ["format"] = request.Format, ["decimate"] = request.Decimate };
             if (request.Crop != null) cmd["crop"] = request.Crop;
@@ -280,6 +326,30 @@ namespace Amatsukaze.Server.Rest
                 while (session.JpegCache.Count > 8 && session.JpegKeys.TryDequeue(out var old)) session.JpegCache.TryRemove(old, out _);
             }
             return reply;
+        }
+
+        public async Task StreamViewAsync(string id, FilterPreviewViewRequest request,
+            Func<FilterPreviewEngine.ViewRecord, CancellationToken, Task> deliver, CancellationToken cancellation)
+        {
+            var session = Get(id);
+            var command = request.ToCommand();
+            Task streaming;
+            await session.ConfigLock.WaitAsync(cancellation).ConfigureAwait(false);
+            try
+            {
+                ValidateKind(session, request.Gen, encoder: true);
+                streaming = session.Engine.StreamViewAsync(command, request.Gen, deliver, cancellation);
+            }
+            finally { session.ConfigLock.Release(); }
+            await streaming.ConfigureAwait(false);
+        }
+
+        private static void ValidateKind(Session session, long generation, bool encoder)
+        {
+            if (generation <= 0 || generation != session.Generation || generation != session.CommittedGeneration)
+                throw new ArgumentException("設定の世代が一致しません");
+            if (ProfileSettingExtensions.GetFilterEncoderType(session.Profile.FilterOption).HasValue != encoder)
+                throw new ArgumentException(encoder ? "エンコーダフィルタが設定されていません" : "AviSynthフィルタが設定されていません");
         }
 
         public async Task<FilterPreviewConfigRequest> GetConfigurationAsync(string id, CancellationToken cancellation)

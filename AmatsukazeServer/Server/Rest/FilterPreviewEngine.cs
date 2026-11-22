@@ -20,10 +20,12 @@ namespace Amatsukaze.Server.Rest
             ready.WaitAsync(ReadyTimeout, Clock, cancellation);
     }
 
-    public sealed class FilterPreviewEngine : IDisposable
+    public sealed partial class FilterPreviewEngine : IDisposable
     {
         public sealed record Reply(IReadOnlyDictionary<string, string> Metadata, byte[] Data);
         private readonly Process process;
+        private readonly TextWriter commandWriter;
+        private readonly Action stopTestPeer;
         private readonly FilterPreviewEngineTiming timing;
         private readonly ConcurrentDictionary<(long id, long gen), TaskCompletionSource<Reply>> pending = new();
         private readonly ConcurrentQueue<string> logs = new();
@@ -41,11 +43,25 @@ namespace Amatsukaze.Server.Rest
         internal FilterPreviewEngine(string executable, IEnumerable<string> arguments, FilterPreviewEngineTiming timing)
         {
             this.timing = timing;
-            var start = new ProcessStartInfo(executable) { UseShellExecute = false, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true };
+            var start = new ProcessStartInfo(executable)
+            {
+                UseShellExecute = false, RedirectStandardInput = true, RedirectStandardOutput = true,
+                RedirectStandardError = true, CreateNoWindow = true, StandardInputEncoding = new UTF8Encoding(false),
+                StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8,
+            };
             foreach (var arg in arguments) start.ArgumentList.Add(arg);
             process = Process.Start(start) ?? throw new IOException("プレビューエンジンを起動できません");
-            _ = ReadOutputAsync();
+            commandWriter = process.StandardInput;
+            _ = ReadOutputAsync(process.StandardOutput.BaseStream);
             _ = ReadErrorsAsync();
+        }
+
+        internal FilterPreviewEngine(TextWriter commandWriter, Stream output, Action stopPeer)
+        {
+            timing = new FilterPreviewEngineTiming(TimeProvider.System, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+            this.commandWriter = commandWriter;
+            stopTestPeer = stopPeer;
+            _ = ReadOutputAsync(output);
         }
 
         public string[] GetLogs() => logs.ToArray();
@@ -81,13 +97,16 @@ namespace Amatsukaze.Server.Rest
             throw new EndOfStreamException("プレビューエンジンが終了しました");
         }
 
-        private async Task ReadOutputAsync()
+        private async Task ReadOutputAsync(Stream output)
         {
             try
             {
-                var stream = process.StandardOutput.BaseStream;
+                using var stream = new BufferedStream(output);
                 var first = await ReadLineAsync(stream).ConfigureAwait(false);
-                if (first != "AMTPREVIEW READY version=1") throw new IOException("プレビューエンジンのバージョンが不正です: " + first);
+                if (first == "AMTPREVIEW READY version=1")
+                    throw new IOException("フィルタプレビューエンジンが古いため、プロトコルv2対応のHWEncVppPreviewCLIが必要です");
+                if (first != "AMTPREVIEW READY version=2")
+                    throw new IOException("プレビューエンジンのバージョンが不正です: " + first);
                 ready.TrySetResult(true);
                 while (true)
                 {
@@ -106,6 +125,13 @@ namespace Amatsukaze.Server.Rest
                     if (messageStart >= 0) values["message"] = line[(messageStart + " message=".Length)..];
                     if (!values.TryGetValue("gen", out var generation) || !long.TryParse(generation, out var gen)) throw new IOException("エンジン応答に世代がありません");
                     long id = values.TryGetValue("id", out var value) && long.TryParse(value, out var parsed) ? parsed : 0;
+                    if (tokens[1] == "VIEW" || tokens[1] == "DONE" || tokens[1] == "ERROR" && pendingViews.ContainsKey((id, gen)))
+                    {
+                        await ReadViewAsync(stream, tokens[1], line, values, id, gen).ConfigureAwait(false);
+                        continue;
+                    }
+                    if (tokens[1] is not ("FRAME" or "INFO" or "ERROR"))
+                        throw new IOException("エンジン応答の種類が不正です");
                     var bytes = Array.Empty<byte>();
                     if (tokens[1] == "FRAME")
                     {
@@ -129,6 +155,8 @@ namespace Amatsukaze.Server.Rest
                 lock (requestSync)
                 {
                     outputError = ex;
+                    foreach (var entry in pendingViews)
+                        if (pendingViews.TryRemove(entry.Key, out var view)) view.Records.Writer.TryComplete(ex);
                     foreach (var entry in pending)
                         if (pending.TryRemove(entry.Key, out var waiter)) waiter.TrySetException(ex);
                 }
@@ -153,25 +181,31 @@ namespace Amatsukaze.Server.Rest
                 if (!frame)
                 {
                     currentGeneration = generation;
+                    foreach (var entry in pendingViews)
+                    {
+                        if (entry.Key.gen >= generation || !pendingViews.TryRemove(entry.Key, out var staleView)) continue;
+                        staleView.Cancellation.Cancel();
+                        staleView.Records.Writer.TryComplete();
+                    }
                     foreach (var entry in pending)
                         if (entry.Key.gen < generation && pending.TryRemove(entry.Key, out var stale)) stale.TrySetCanceled();
                 }
                 // 登録順の送信を予約し、旧世代の応答待ちは書き込み完了を待たずに解除する。
-                writeTail = WriteQueuedAsync(writeTail, serialized, waiter);
+                writeTail = WriteQueuedAsync(writeTail, serialized, ex => waiter.TrySetException(ex));
                 return AwaitReplyAsync(id, generation, frame, waiter, cancellation);
             }
         }
 
-        private async Task WriteQueuedAsync(Task previous, string message, TaskCompletionSource<Reply> waiter)
+        private async Task WriteQueuedAsync(Task previous, string message, Action<Exception> fail)
         {
             try
             {
                 await previous.ConfigureAwait(false);
                 await ready.Task.ConfigureAwait(false);
-                await process.StandardInput.WriteLineAsync(message).ConfigureAwait(false);
-                await process.StandardInput.FlushAsync().ConfigureAwait(false);
+                await commandWriter.WriteLineAsync(message).ConfigureAwait(false);
+                await commandWriter.FlushAsync().ConfigureAwait(false);
             }
-            catch (Exception ex) { waiter?.TrySetException(ex); }
+            catch (Exception ex) { fail?.Invoke(ex); }
         }
 
         private async Task<Reply> AwaitReplyAsync(long id, long generation, bool frame, TaskCompletionSource<Reply> waiter, CancellationToken cancellation)
@@ -192,6 +226,11 @@ namespace Amatsukaze.Server.Rest
         {
             if (disposed) return true;
             disposed = true;
+            if (process == null)
+            {
+                stopTestPeer();
+                return true;
+            }
             try
             {
                 if (!process.HasExited) process.Kill(entireProcessTree: true);
