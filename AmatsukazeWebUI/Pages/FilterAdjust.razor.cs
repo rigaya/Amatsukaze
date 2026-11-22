@@ -34,6 +34,7 @@ public partial class FilterAdjust
     private bool _seeking;
     private int _position, _frames, _width, _height, _cropX, _cropY, _cropWidth = 640, _cropHeight = 360;
     private double _fps = 60000d / 1001, _inputDar;
+    private double? _pendingAviSynthSeconds;
     private bool _decimate = true, _pngFallback, _expired, _disposed, _saving, _cropEnabled;
     private static readonly (string Value, string Label)[] ViewChoices = [("after", "フィルタ後"), ("before", "フィルタ前"), ("compare", "左右比較")];
     private static readonly (string Value, string Label)[] ScaleChoices = [("1", "1/1"), ("2", "1/2")];
@@ -43,6 +44,8 @@ public partial class FilterAdjust
     private bool DecimateInfoMissing, _reopening;
     private bool CustomReplaced;
     private int MaxFrame => Math.Max(0, _frames - 1);
+    private double AviSynthSeconds => _fps > 0 ? _position / _fps : 0;
+    private int AviSynthPosition(double seconds) => (int)Math.Clamp(Math.Round(seconds * _fps), 0, MaxFrame);
     private bool CanOperate => !_disposed && !_expired && _sessionId != null && (IsEncoder ? _width > 0 : _frames > 0);
     private bool _busy => _reopening || _configurationCancellation != null || _frameCancellation != null || _seeking;
     private bool _fetchingFrame => _frameCancellation is { IsCancellationRequested: false };
@@ -138,8 +141,20 @@ public partial class FilterAdjust
     private async Task KindChangedAsync(ChangeEventArgs e)
     {
         if (_profile == null) return;
+        bool wasEncoder = IsEncoder;
         CustomReplaced = false;
         Set(_profile, "FilterOption", JsonValue.Create(e.Value?.ToString() ?? "None"));
+        if (wasEncoder && !IsEncoder)
+        {
+            // 新しいfpsが届くまで、切り替え元の時刻を丸めずに保持する。
+            _pendingAviSynthSeconds = _encoderSeconds;
+            _position = AviSynthPosition(_encoderSeconds);
+        }
+        else if (!wasEncoder && IsEncoder)
+        {
+            _encoderSeconds = _pendingAviSynthSeconds ?? AviSynthSeconds;
+            _pendingAviSynthSeconds = null;
+        }
         await SettingsChangedAsync();
     }
     private Task SettingsChangedAsync()
@@ -190,10 +205,11 @@ public partial class FilterAdjust
             }
             else
             {
-                var seconds = _fps > 0 ? _position / _fps : 0;
+                var seconds = _pendingAviSynthSeconds ?? AviSynthSeconds;
                 _fps = num > 0 && den > 0 ? (double)num / den : _fps;
                 _frames = Number(info, "frames");
-                _position = Math.Clamp((int)Math.Round(seconds * _fps), 0, Math.Max(0, _frames - 1));
+                _position = AviSynthPosition(seconds);
+                _pendingAviSynthSeconds = null;
             }
             _width = Number(info, "width"); _height = Number(info, "height");
             _notices = (Node(result, "notices") as JsonArray)?.Select(x => x?.ToString() ?? "").ToArray() ?? [];
@@ -236,7 +252,7 @@ public partial class FilterAdjust
         if (IsEncoder) return StartEncoderViewAsync(new("step", Direction: direction < 0 ? "previous" : "next"));
         if (CanOperate && !Ready)
         {
-            _position = Math.Clamp(_position + direction, 0, MaxFrame);
+            SetAviSynthPosition(_position + direction);
             return Task.CompletedTask;
         }
         return StartFrameAsync(direction);
@@ -264,7 +280,7 @@ public partial class FilterAdjust
     private Task SeekAsync(ChangeEventArgs e)
     {
         if (!CanOperate || !int.TryParse(e.Value?.ToString(), out var pos)) return Task.CompletedTask;
-        _position = Math.Clamp(pos, 0, MaxFrame);
+        SetAviSynthPosition(pos);
         if (!Ready) return Task.CompletedTask;
         // AviSynth/KFMは未取得位置の読み込みが長引くため、途中の取得を打ち切って最新位置を優先する。
         if (FilterKind == "Setting") return RefreshAsync();
@@ -273,6 +289,11 @@ public partial class FilterAdjust
         if (_seeking) return Task.CompletedTask;
         _seeking = true;
         return TrackAsync(DrainSeekAsync(_seekRevision));
+    }
+    private void SetAviSynthPosition(int position)
+    {
+        _position = Math.Clamp(position, 0, MaxFrame);
+        if (_pendingAviSynthSeconds.HasValue) _pendingAviSynthSeconds = AviSynthSeconds;
     }
     private async Task DrainSeekAsync(long revision)
     {
