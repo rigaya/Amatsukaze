@@ -96,30 +96,44 @@
 }
 
 .fa-status {
-    display: flex;
+    /* 文言やエラーの有無で操作バーの折り返しと高さが変わらないよう、2行分の領域を取る。 */
+    flex: 0 1 16rem;
+    max-width: 100%;
+    display: grid;
+    grid-template-columns: 12px minmax(0, 1fr);
+    grid-template-rows: repeat(2, 1.25em);
     align-items: center;
-    gap: 8px;
+    column-gap: 8px;
     margin-left: auto;
     min-width: 0;
     font-size: 0.8rem;
+    line-height: 1.25;
     color: var(--muted);
 }
 
-.fa-status > span {
+.fa-status-message,
+.fa-status-error {
+    grid-column: 2;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
+.fa-status-message {
+    grid-row: 1;
+}
+
 .fa-status-error {
+    grid-row: 2;
     color: var(--update-attention-text, #d33);
     font-weight: 600;
 }
 
 .fa-spinner {
+    grid-column: 1;
+    grid-row: 1;
     width: 12px;
     height: 12px;
-    flex-shrink: 0;
     border: 2px solid var(--accent-soft);
     border-top-color: var(--accent-strong);
     border-radius: 50%;

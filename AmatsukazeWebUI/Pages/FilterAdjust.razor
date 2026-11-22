@@ -55,10 +55,10 @@
         @* 試験はrole=statusの文言で同期するため、エラーは別の要素に出す *@
         <div class="fa-status">
             @if (_busy) { <span class="fa-spinner" aria-hidden="true"></span> }
-            <span role="status" aria-live="polite">@_status</span>
+            <span class="fa-status-message" role="status" aria-live="polite" title="@_status">@_status</span>
             @if (_error != null && _profile != null)
             {
-                <span class="fa-status-error" role="alert">@_error</span>
+                <span class="fa-status-error" role="alert" title="@_error">@_error</span>
             }
         </div>
     </header>
