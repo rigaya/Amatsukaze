@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
+using System.Reflection;
 using System.Text.Json.Nodes;
 using Amatsukaze.Shared;
 using Microsoft.AspNetCore.Components;
@@ -14,6 +15,7 @@ public partial class FilterAdjust
     [Parameter] public int QueueItemId { get; set; }
     private const string QualityKey = "amatsukaze.filterPreview.quality";
     private const string Root = "api/filter-preview/sessions";
+    private static readonly string ModuleVersion = GetModuleVersion();
     private readonly CancellationTokenSource _lifetime = new();
     private CancellationTokenSource? _configurationCancellation, _frameCancellation;
     private CancellationTokenSource _sessionCancellation = new();
@@ -56,6 +58,16 @@ public partial class FilterAdjust
     }
     private static int Number(JsonObject obj, string name, int fallback = 0) => int.TryParse(Node(obj, name)?.ToString(), CultureInfo.InvariantCulture, out var value) ? value : fallback;
 
+    private static string GetModuleVersion()
+    {
+        var assembly = typeof(FilterAdjust).Assembly;
+        var hash = assembly.GetCustomAttributes<AssemblyMetadataAttribute>().Single(metadata => metadata.Key == "WebUiModuleHash").Value;
+        return $"{assembly.ManifestModule.ModuleVersionId:N}.{hash}";
+    }
+
+    private ValueTask<IJSObjectReference> ImportModuleAsync(string file)
+        => JS.InvokeAsync<IJSObjectReference>("import", $"./js/{file}?v={ModuleVersion}");
+
     protected override Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender) return Task.CompletedTask;
@@ -66,10 +78,9 @@ public partial class FilterAdjust
     {
         try
         {
-            // 再検証なしで保存された旧モジュールを、更新後の初回から使わない。
-            _renderer = await JS.InvokeAsync<IJSObjectReference>("import", "./js/filterPreview.js?v=2");
-            _lifecycle = await JS.InvokeAsync<IJSObjectReference>("import", "./js/filterPreviewSession.js");
-            _viewerModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/filterPreviewViewer.js");
+            _renderer = await ImportModuleAsync("filterPreview.js");
+            _lifecycle = await ImportModuleAsync("filterPreviewSession.js");
+            _viewerModule = await ImportModuleAsync("filterPreviewViewer.js");
             _callback = DotNetObjectReference.Create(this);
             _viewer = await _viewerModule.InvokeAsync<IJSObjectReference>("bind", _viewport, _imageLayer, _beforeCanvas, _afterCanvas,
                 _divider, _fitButton, _actualSizeButton, _zoomLabel, _callback);

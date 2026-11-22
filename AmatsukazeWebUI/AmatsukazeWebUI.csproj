@@ -17,4 +17,23 @@
     <ProjectReference Include="..\AmatsukazeShared\AmatsukazeShared.csproj" />
   </ItemGroup>
 
+  <!-- JSだけの更新でもWebUIのコンパイルとimportのURLに変更を反映する。 -->
+  <Target Name="AddWebUiModuleVersion" BeforeTargets="GetAssemblyAttributes">
+    <ItemGroup>
+      <_WebUiModule Include="wwwroot/js/**/*.js" />
+    </ItemGroup>
+    <GetFileHash Files="@(_WebUiModule)" Algorithm="SHA256">
+      <Output TaskParameter="Items" ItemName="_HashedWebUiModule" />
+    </GetFileHash>
+    <WriteLinesToFile File="$(IntermediateOutputPath)webui-modules.hash"
+                      Lines="@(_HashedWebUiModule->'%(Identity) %(FileHash)')"
+                      Overwrite="true" WriteOnlyWhenDifferent="true" />
+    <GetFileHash Files="$(IntermediateOutputPath)webui-modules.hash" Algorithm="SHA256">
+      <Output TaskParameter="Hash" PropertyName="_WebUiModuleHash" />
+    </GetFileHash>
+    <ItemGroup>
+      <AssemblyMetadata Include="WebUiModuleHash" Value="$(_WebUiModuleHash)" />
+    </ItemGroup>
+  </Target>
+
 </Project>
