@@ -23,6 +23,7 @@ public partial class FilterAdjust
     private string? _encoderBoundary;
     private string EncoderDisplayMode => _view == "compare" ? "sideBySide" : _view;
     private string EncoderSeekValue => FormatSeconds(_encoderSeconds);
+    private string EncoderTimeText => FormatTime(_encoderSeconds);
     private static string FormatSeconds(double seconds) => seconds.ToString("0.######", CultureInfo.InvariantCulture);
     private bool CanStep(int direction) => CanOperate && (IsEncoder
         ? Ready && _encoderBoundary != (direction < 0 ? "start" : "end")
@@ -34,9 +35,27 @@ public partial class FilterAdjust
     }
 
     private Task SeekEncoderAsync(ChangeEventArgs args, string phase)
+        => double.TryParse(args.Value?.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var seconds)
+            ? SeekEncoderToAsync(seconds, phase) : Task.CompletedTask;
+
+    private Task SeekEncoderTimeAsync(string value)
     {
-        if (!CanOperate || !double.TryParse(args.Value?.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var seconds)
-            || !double.IsFinite(seconds) || seconds < 0 || seconds >= TimeSpan.MaxValue.TotalSeconds) return Task.CompletedTask;
+        var text = value.AsSpan().Trim();
+        int separator = text.IndexOf(':');
+        if (separator < 0)
+            return double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var seconds)
+                ? SeekEncoderToAsync(seconds, "commit") : Task.CompletedTask;
+
+        if (!int.TryParse(text[..separator], NumberStyles.None, CultureInfo.InvariantCulture, out var hours)
+            || !TimeSpan.TryParseExact(text[(separator + 1)..], @"mm\:ss\.fff", CultureInfo.InvariantCulture, out var rest))
+            return Task.CompletedTask;
+        return SeekEncoderToAsync(hours * 3600d + rest.TotalSeconds, "commit");
+    }
+
+    private Task SeekEncoderToAsync(double seconds, string phase)
+    {
+        if (!CanOperate || !double.IsFinite(seconds) || seconds < 0 || seconds >= TimeSpan.MaxValue.TotalSeconds)
+            return Task.CompletedTask;
         _encoderSeconds = Math.Min(seconds, _encoderDurationSeconds ?? seconds);
         return StartEncoderViewAsync(new("seek", _encoderSeconds, phase));
     }

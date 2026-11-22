@@ -118,8 +118,8 @@
                             disabled="@(!CanStep(-1))" title="前のコマ (←)" aria-label="前のコマ">&#x25C0;</button>
                     @if (IsEncoder)
                     {
-                        <input class="fa-time-input" type="number" min="0" step="any" value="@EncoderSeekValue"
-                               @onchange='e => SeekEncoderAsync(e, "commit")' disabled="@(!CanOperate)" aria-label="時刻(秒)" />
+                        <input class="fa-time-input" type="text" @bind:get="EncoderTimeText" @bind:set="SeekEncoderTimeAsync"
+                               disabled="@(!CanOperate)" aria-label="現在時刻" />
                         @if (_encoderDurationSeconds is double length)
                         {
                             <span class="fa-muted">/ @FormatTime(length)</span>
@@ -133,9 +133,9 @@
                     }
                     <button type="button" class="fa-btn fa-btn-step" @onclick="() => StepAsync(1)"
                             disabled="@(!CanStep(1))" title="次のコマ (→)" aria-label="次のコマ">&#x25B6;</button>
-                    <span class="fa-chip" title="先頭からの時間">@(IsEncoder ? FormatTime(_encoderSeconds) : TimeSpan.FromSeconds(_fps > 0 ? _position / _fps : 0).ToString(@"h\:mm\:ss\.fff", CultureInfo.InvariantCulture))</span>
                     @if (!IsEncoder)
                     {
+                        <span class="fa-chip" title="先頭からの時間">@(TimeSpan.FromSeconds(_fps > 0 ? _position / _fps : 0).ToString(@"h\:mm\:ss\.fff", CultureInfo.InvariantCulture))</span>
                         <span class="fa-chip">@FpsLabel</span>
                     }
                     @if (!string.IsNullOrEmpty(FrameTypeLabel))
