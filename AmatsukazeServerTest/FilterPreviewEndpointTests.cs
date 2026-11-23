@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Runtime.Versioning;
 using System.Text.Json;
 using Amatsukaze.Lib;
 using Amatsukaze.Server;
@@ -152,6 +153,72 @@ public class FilterPreviewEndpointTests
         Assert.False(view.TryGetProperty("scale", out _));
     }
 
+    [Theory]
+    [InlineData(FilterOption.VCEEncFilter, "VCEEnc", null)]
+    [InlineData(FilterOption.VCEEncFilter, "VCEEnc", "")]
+    [InlineData(FilterOption.VCEEncFilter, "VCEEnc", "missing")]
+    [InlineData(FilterOption.QSVEncFilter, "QSVEnc", "missing")]
+    [InlineData(FilterOption.NVEncFilter, "NVEnc", "missing")]
+    public async Task 利用できないエンコーダのパスは設定の受信時に拒否する(FilterOption option, string encoder, string? name)
+    {
+        using var peer = new FilterPreviewViewTests.Peer();
+        await using var fixture = CreateFixture(peer);
+        var path = string.IsNullOrEmpty(name) ? name : Path.Combine(fixture.Root, name);
+        switch (option)
+        {
+            case FilterOption.QSVEncFilter: fixture.Data.setting.QSVEncPath = path; break;
+            case FilterOption.NVEncFilter: fixture.Data.setting.NVEncPath = path; break;
+            case FilterOption.VCEEncFilter: fixture.Data.setting.VCEEncPath = path; break;
+        }
+        await fixture.Api.Queue.Store.OnCommonData(new CommonData { Setting = fixture.Data.setting });
+        var sessionId = await CreateSessionAsync(fixture, peer, MakeProfile("元"));
+        await ConfigureAsync(fixture, peer, sessionId, 1, "None");
+
+        using var cancel = new CancellationTokenSource();
+        var attemptedForwarding = peer.NextCommandAsync("config", cancel.Token);
+        try
+        {
+            var body = JsonSerializer.Serialize(new { gen = 2, filterOption = option.ToString() });
+            var request = fixture.Api.Send("PUT", Session + "/config", body: body, routeValues: new { sessionId });
+            Assert.Same(request, await Task.WhenAny(request, attemptedForwarding));
+            var result = await request;
+            Assert.Equal(400, result.Status);
+            using var error = JsonDocument.Parse(result.Body);
+            Assert.Equal(string.IsNullOrEmpty(path)
+                ? $"{encoder}のパスが設定されていません(設定画面で指定してください)"
+                : $"{encoder}の実行ファイルが見つかりません: {path}",
+                error.RootElement.GetProperty("message").GetString());
+        }
+        finally { cancel.Cancel(); }
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => attemptedForwarding);
+
+        // 拒否した設定はエンジンの世代を進めず、同じセッションで別の設定を選べる。
+        await ConfigureAsync(fixture, peer, sessionId, 2, "None");
+    }
+
+    [LinuxFact]
+    [SupportedOSPlatform("linux")]
+    public async Task PATHにあるエンコーダ名を設定で受け付ける()
+    {
+        using var peer = new FilterPreviewViewTests.Peer();
+        await using var fixture = CreateFixture(peer);
+        var tools = Path.Combine(fixture.Root, "自動検索先");
+        Directory.CreateDirectory(tools);
+        var executable = Path.Combine(tools, "vceencc");
+        File.WriteAllText(executable, "");
+        File.SetUnixFileMode(executable, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+        fixture.Data.setting.VCEEncPath = "vceencc";
+        await fixture.Api.Queue.Store.OnCommonData(new CommonData { Setting = fixture.Data.setting });
+        var previousPath = Environment.GetEnvironmentVariable("PATH");
+        try
+        {
+            Environment.SetEnvironmentVariable("PATH", tools);
+            var sessionId = await CreateSessionAsync(fixture, peer, MakeProfile("元"));
+            await ConfigureAsync(fixture, peer, sessionId, 1, "VCEEncFilter");
+        }
+        finally { Environment.SetEnvironmentVariable("PATH", previousPath); }
+    }
+
     private static ProfileSetting MakeProfile(string name)
     {
         var profile = ServerSupport.NormalizeProfile(null!);
@@ -196,7 +263,16 @@ public class FilterPreviewEndpointTests
             qsvEncFilterOption = "--vpp-knn", nvEncFilterOption = "--vpp-deband", vceEncFilterOption = "--vpp-resize",
         });
         var response = fixture.Api.Send("PUT", Session + "/config", body: body, routeValues: new { sessionId });
-        var command = await peer.NextCommandAsync("config");
+        using var cancel = new CancellationTokenSource();
+        var pendingCommand = peer.NextCommandAsync("config", cancel.Token);
+        if (await Task.WhenAny(response, pendingCommand) == response)
+        {
+            cancel.Cancel();
+            var failed = await response;
+            Assert.Fail($"設定がエンジンへ送られませんでした。HTTP {failed.Status} {failed.Body}");
+        }
+        var command = await pendingCommand;
+        Assert.Equal(gen, command.GetProperty("gen").GetInt64());
         var kind = command.GetProperty("kind").GetString();
         await peer.SendTextAsync($"AMTPREVIEW INFO gen={gen} kind={kind} frames=4 width=2 height=2\n");
         Assert.Equal(200, (await response).Status);

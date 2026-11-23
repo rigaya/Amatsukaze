@@ -22,6 +22,21 @@ public class FilterPreviewEngineTests
         Assert.Equal("外部ログ id=99 gen=88 rc=-55", ioError.Message);
     }
 
+    [Fact]
+    public async Task エラーで設定の応答を返す時点で原因がログにある()
+    {
+        using var peer = new FilterPreviewViewTests.Peer();
+        await peer.SendTextAsync("AMTPREVIEW READY version=2\n");
+        var pending = peer.Engine.RequestAsync(new() { ["cmd"] = "config" }, 1, false, CancellationToken.None);
+        _ = await peer.NextCommandAsync("config");
+        const string message = "The encoder exited while reading input information: -55 (Intel GPU was not found)";
+        await peer.SendTextAsync($"AMTPREVIEW ERROR id=0 gen=1 message={message}\n");
+
+        var error = await Assert.ThrowsAsync<System.IO.IOException>(() => pending);
+        Assert.Equal(message, error.Message);
+        Assert.Contains(message, peer.Engine.GetLogs());
+    }
+
     [LinuxFact]
     public async Task 対応しないREADYの版は起動失敗として返す()
     {

@@ -164,7 +164,7 @@ public partial class FilterAdjust
                     await stream.ReadExactlyAsync(metaBytes, token);
                     var packet = JsonSerializer.Deserialize<EncoderView>(metaBytes, ViewRequestJson)
                         ?? throw new InvalidDataException("表示応答のメタデータがありません");
-                    await DrawEncoderViewAsync(packet, stream, payloadSize, frameOptions, receivedSides,
+                    await DrawEncoderViewAsync(packet, stream, payloadSize, gen, frameOptions, receivedSides,
                         operation.Op != "snapshot", Current, token);
                 }
                 token.ThrowIfCancellationRequested();
@@ -172,7 +172,7 @@ public partial class FilterAdjust
             }
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
-        catch (Exception ex) { if (Current()) ShowError(ex); }
+        catch (Exception ex) { if (Current()) ShowPreviewError(ex); }
         finally { FinishFrameRequest(cancellation); }
     }
 
@@ -181,7 +181,7 @@ public partial class FilterAdjust
         int Sarnum, int Sarden, string? Matrix, string? Range, string? Primaries, string? Transfer, string? Chromaloc, bool Reuse);
     private sealed record ReceivedEncoderFrame(EncoderViewFrame Frame, bool Drawn);
 
-    private async Task DrawEncoderViewAsync(EncoderView packet, Stream stream, int payloadSize,
+    private async Task DrawEncoderViewAsync(EncoderView packet, Stream stream, int payloadSize, long gen,
         FrameOptions options, Dictionary<string, ReceivedEncoderFrame> receivedSides, bool allowReuse, Func<bool> current, CancellationToken token)
     {
         string view = packet.DisplayMode switch
@@ -232,6 +232,7 @@ public partial class FilterAdjust
             if (!current()) return;
             if (!success && options.Format == "yuv") _pngFallback = true;
             else if (!success) throw new InvalidOperationException("画像を描画できません");
+            else RecordImageGeneration(frame.Side, gen);
             receivedSides[frame.Side] = new(frame, success);
         }
         if (!current()) return;
@@ -241,10 +242,13 @@ public partial class FilterAdjust
         if (!packet.Frames.Any(f => f.Side == "before")) receivedSides.Remove("before");
         var after = receivedSides.GetValueOrDefault("after");
         var before = receivedSides.GetValueOrDefault("before");
-        if (after?.Drawn != true) await _renderer!.InvokeVoidAsync("clear", _afterCanvas);
-        if (!current()) return;
-        if (before?.Drawn != true) await _renderer!.InvokeVoidAsync("clear", _beforeCanvas);
-        if (!current()) return;
+        foreach (var side in new[] { "after", "before" })
+        {
+            if (receivedSides.GetValueOrDefault(side)?.Drawn == true) continue;
+            await _renderer!.InvokeVoidAsync("clear", side == "before" ? _beforeCanvas : _afterCanvas);
+            if (!current()) return;
+            RecordImageGeneration(side, null);
+        }
         if ((after ?? before)?.Frame is { } display)
         {
             double height = options.Crop?[3] ?? display.Height;
@@ -253,7 +257,7 @@ public partial class FilterAdjust
             await _viewer!.InvokeVoidAsync("present", view, height * dar, height);
         }
         if (!current()) return;
-        _displayedView = view;
+        PresentPreview(view);
         if (packet.Frames.Length > 0 && (!_pngFallback || options.Format != "yuv"))
             _status = "表示中…";
         StateHasChanged();

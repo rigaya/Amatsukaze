@@ -117,6 +117,27 @@ public class FilterPreviewViewTests
     }
 
     [Fact]
+    public async Task 表示操作のエラーを届ける時点で原因がログにある()
+    {
+        using var peer = new Peer();
+        await peer.ConfigureAsync(1);
+        const string message = "Encoder failed: -24 (Invalid value)";
+        var delivered = new List<FilterPreviewEngine.ViewRecord>();
+        var pending = peer.Engine.StreamViewAsync(new() { ["op"] = "seek" }, 1,
+            (record, _) =>
+            {
+                Assert.Contains(message, peer.Engine.GetLogs());
+                delivered.Add(record);
+                return Task.CompletedTask;
+            }, CancellationToken.None);
+        long id = (await peer.NextCommandAsync("view")).GetProperty("id").GetInt64();
+        await peer.SendTextAsync($"AMTPREVIEW ERROR id={id} gen=1 message={message}\n");
+
+        await pending;
+        Assert.EndsWith($"message={message}", Assert.Single(delivered).Header);
+    }
+
+    [Fact]
     public async Task v1エンジンは古い版であることをREADYのエラーで知らせる()
     {
         using var peer = new Peer();
@@ -183,9 +204,9 @@ public class FilterPreviewViewTests
             await config;
         }
 
-        public async Task<JsonElement> NextCommandAsync(string name)
+        public async Task<JsonElement> NextCommandAsync(string name, CancellationToken cancellation = default)
         {
-            using var document = JsonDocument.Parse(await input.Commands.Reader.ReadAsync());
+            using var document = JsonDocument.Parse(await input.Commands.Reader.ReadAsync(cancellation));
             var command = document.RootElement.Clone();
             Assert.Equal(name, command.GetProperty("cmd").GetString());
             return command;

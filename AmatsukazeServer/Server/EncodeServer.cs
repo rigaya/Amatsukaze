@@ -1918,7 +1918,7 @@ namespace Amatsukaze.Server
             checkLogFile.Save(checkLogData.Items);
         }
 
-        private static string GetEncoderPath(EncoderType encoderType, Setting setting)
+        internal static string GetEncoderPath(EncoderType encoderType, Setting setting)
         {
             if (encoderType == EncoderType.x264)
             {
@@ -2782,30 +2782,25 @@ namespace Amatsukaze.Server
             return Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         }
 
-        private static void CheckPath(string name, string path)
+        internal static bool ConfiguredPathExists(string path)
         {
             if (string.IsNullOrEmpty(path))
-                return;
-
+                return false;
             if (File.Exists(path))
-                return;
+                return true;
+            if (!Util.IsServerLinux() || Path.IsPathRooted(path))
+                return false;
 
-            // Linux環境の場合、PATHもチェック
-            if (Util.IsServerLinux())
-            {
-                var pathEnv = Environment.GetEnvironmentVariable("PATH");
-                if (!string.IsNullOrEmpty(pathEnv))
-                {
-                    foreach (var dir in pathEnv.Split(':'))
-                    {
-                        var fullPath = Path.Combine(dir, path);
-                        if (File.Exists(fullPath))
-                            return;
-                    }
-                }
-            }
+            // Linuxの自動検出で保存された実行ファイル名も確認する。
+            var pathEnv = Environment.GetEnvironmentVariable("PATH");
+            return !string.IsNullOrEmpty(pathEnv) && pathEnv.Split(':')
+                .Any(directory => File.Exists(Path.Combine(directory, path)));
+        }
 
-            throw new InvalidOperationException(name + "パスが無効です: " + path);
+        private static void CheckPath(string name, string path)
+        {
+            if (!string.IsNullOrEmpty(path) && !ConfiguredPathExists(path))
+                throw new InvalidOperationException(name + "パスが無効です: " + path);
         }
 
         private static void CheckDoubleDeinterlace(ProfileSetting profile)

@@ -32,12 +32,14 @@ public partial class FilterAdjust
     private string _status = "読み込み中…", _view = "after", _displayedView = "after", _quality = "yuv", _saveName = "", _saveTarget = "";
     private string[] _notices = [], _logs = [], _profileNames = [];
     private long _generation, _committedGeneration, _frameRevision, _seekRevision;
+    private long? _afterImageGeneration, _beforeImageGeneration;
     private int? _activeSeek, _pendingSeek;
     private bool _seeking;
     private int _position, _frames, _width, _height, _cropX, _cropY, _cropWidth = 640, _cropHeight = 360;
     private double _fps = 60000d / 1001, _inputDar;
     private double? _pendingAviSynthSeconds;
     private bool _decimate = true, _pngFallback, _expired, _disposed, _saving, _cropEnabled;
+    private bool _previewErrorWithPreviousImage;
     private static readonly (string Value, string Label)[] ViewChoices = [("after", "フィルタ後"), ("before", "フィルタ前"), ("compare", "左右比較")];
     private string? _sourceName;
     private string FrameTypeLabel = "";
@@ -52,6 +54,10 @@ public partial class FilterAdjust
     private bool _fetchingFrame => _frameCancellation is { IsCancellationRequested: false };
     private bool Ready => CanOperate && _generation == _committedGeneration;
     private bool CanOverwrite => Ready && !_saving && !string.IsNullOrEmpty(_saveTarget);
+    private bool ShowPreviousSettingsWarning => _previewErrorWithPreviousImage && HasPreviousSettingsImage;
+    private bool HasPreviousSettingsImage =>
+        (_displayedView != "before" && _afterImageGeneration is long after && after != _generation)
+        || (_displayedView != "after" && _beforeImageGeneration is long before && before != _generation);
     private string SessionUrl => $"{Root}/{_sessionId}";
     private string FilterKind => Node(_profile, "FilterOption")?.ToString() ?? "None";
     private bool IsEncoder => FilterKind.EndsWith("EncFilter", StringComparison.Ordinal);
@@ -141,6 +147,22 @@ public partial class FilterAdjust
         }
     }
     private void ShowError(Exception ex) { if (!_disposed) { _error = ex.Message; _status = "操作に失敗しました"; } }
+    private void ShowPreviewError(Exception ex)
+    {
+        ShowError(ex);
+        _previewErrorWithPreviousImage = HasPreviousSettingsImage;
+    }
+    // 設定の応答では画像を更新せず、実際の描画・消去が済んだ側だけを記録する。
+    private void RecordImageGeneration(string side, long? generation)
+    {
+        if (side == "before") _beforeImageGeneration = generation;
+        else _afterImageGeneration = generation;
+    }
+    private void PresentPreview(string view)
+    {
+        _displayedView = view;
+        if (_previewErrorWithPreviousImage && !HasPreviousSettingsImage) _previewErrorWithPreviousImage = false;
+    }
     private async Task KindChangedAsync(ChangeEventArgs e)
     {
         if (_profile == null) return;
@@ -224,7 +246,7 @@ public partial class FilterAdjust
             await LoadLogsAsync();
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
-        catch (Exception ex) { if (gen == _generation && !token.IsCancellationRequested) ShowError(ex); }
+        catch (Exception ex) { if (gen == _generation && !token.IsCancellationRequested) ShowPreviewError(ex); }
         finally { if (ReferenceEquals(_configurationCancellation, cancellation)) _configurationCancellation = null; cancellation.Dispose(); }
     }
     private async Task ReadInputAspectAsync(JsonObject info, long gen, CancellationToken token)
@@ -379,11 +401,9 @@ public partial class FilterAdjust
             var dar = _inputDar > 0 ? _inputDar : display.Width * display.Sar / display.Height;
             await _viewer!.InvokeVoidAsync("present", view, height * dar, height);
             if (!Current()) return;
-            if (_displayedView != view)
-            {
-                _displayedView = view;
-                StateHasChanged();
-            }
+            bool updatePresentation = _displayedView != view || _previewErrorWithPreviousImage;
+            PresentPreview(view);
+            if (updatePresentation) StateHasChanged();
             await Task.WhenAll(after?.ValidateEndAsync(token) ?? Task.CompletedTask,
                 before?.ValidateEndAsync(token) ?? Task.CompletedTask);
             if (!Current()) return;
@@ -394,7 +414,7 @@ public partial class FilterAdjust
             _status = _pngFallback && _quality == "yuv" ? "表示しました(PNG代替)" : "表示しました";
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
-        catch (Exception ex) { if (Current()) ShowError(ex); }
+        catch (Exception ex) { if (Current()) ShowPreviewError(ex); }
         finally
         {
             after?.Dispose();
@@ -514,6 +534,7 @@ public partial class FilterAdjust
             if (current()) await DrawFrameAsync(canvas, side, png, gen, pngOptions, current, token);
         }
         else if (!success) throw new InvalidOperationException("画像を描画できません");
+        else RecordImageGeneration(side, gen);
     }
     private void UpdateFrameInfo(Dictionary<string, string> metadata)
     {

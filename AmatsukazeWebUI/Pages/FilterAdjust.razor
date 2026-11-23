@@ -76,6 +76,10 @@
                 {
                     <span class="fa-badge fa-badge-fetching" aria-hidden="true">取得中</span>
                 }
+                @if (ShowPreviousSettingsWarning)
+                {
+                    <div class="fa-preview-warning" aria-live="polite">この画像は今の設定の結果ではありません</div>
+                }
                 @if (_profile == null)
                 {
                     <div class="fa-overlay">

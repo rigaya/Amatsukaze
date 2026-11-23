@@ -173,8 +173,13 @@ namespace Amatsukaze.Server.Rest
             }
             finally { if (File.Exists(temporarySource)) File.Delete(temporarySource); }
             var args = new List<string> { "--amatsukaze-engine", "--tmp", temp, "--video", "0", "--amatsukaze-dir", module };
-            foreach (var pair in new[] { ("--qsvenc", setting.QSVEncPath), ("--nvenc", setting.NVEncPath), ("--vceenc", setting.VCEEncPath) })
-                if (!string.IsNullOrEmpty(pair.Item2)) { args.Add(pair.Item1); args.Add(pair.Item2); }
+            foreach (var (option, encoder) in new[] { ("--qsvenc", EncoderType.QSVEnc), ("--nvenc", EncoderType.NVEnc), ("--vceenc", EncoderType.VCEEnc) })
+            {
+                var path = EncodeServer.GetEncoderPath(encoder, setting);
+                if (string.IsNullOrWhiteSpace(path)) continue;
+                args.Add(option);
+                args.Add(path);
+            }
             var id = Guid.NewGuid().ToString("N");
             var workDirectory = Path.Combine(dir, id);
             var profile = ServerSupport.DeepCopy(item.Profile);
@@ -273,6 +278,11 @@ namespace Amatsukaze.Server.Rest
                 {
                     var encoder = ProfileSettingExtensions.GetFilterEncoderType(profile.FilterOption);
                     if (!encoder.HasValue) throw new ArgumentException("カスタムフィルタはプレビューできません");
+                    var path = EncodeServer.GetEncoderPath(encoder.Value, session.Setting);
+                    if (string.IsNullOrWhiteSpace(path))
+                        throw new ArgumentException($"{encoder.Value}のパスが設定されていません(設定画面で指定してください)");
+                    if (!EncodeServer.ConfiguredPathExists(path))
+                        throw new ArgumentException($"{encoder.Value}の実行ファイルが見つかりません: {path}");
                     cmd["kind"] = "encoder"; cmd["encoder"] = encoder.Value.ToString();
                     cmd["vpp"] = SplitOptions(ProfileSettingExtensions.GetFilterEncoderOption(profile));
                 }

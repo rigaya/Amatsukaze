@@ -247,6 +247,25 @@
     bottom: 8px;
 }
 
+.fa-preview-warning {
+    position: absolute;
+    inset-inline: 8px;
+    bottom: 36px;
+    width: fit-content;
+    max-width: calc(100% - 16px);
+    margin-inline: auto;
+    padding: 4px 10px;
+    border: 1px solid #f4c25f;
+    border-radius: 4px;
+    background: #242017;
+    color: #ffe1a3;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-align: center;
+    pointer-events: none;
+    z-index: 1;
+}
+
 .fa-overlay {
     position: absolute;
     inset: 0;

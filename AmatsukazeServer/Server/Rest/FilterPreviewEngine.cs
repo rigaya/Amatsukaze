@@ -73,15 +73,18 @@ namespace Amatsukaze.Server.Rest
             try
             {
                 while (await process.StandardError.ReadLineAsync().ConfigureAwait(false) is string line)
-                {
-                    if (line.Length > 4096) line = line[..4096];
-                    logs.Enqueue(line);
-                    while (logs.Count > 100) logs.TryDequeue(out _);
-                    Util.AddLog("[FilterPreview] " + line, null);
-                }
+                    AddLog(line);
             }
             catch (ObjectDisposedException) { }
             catch (IOException) { }
+        }
+
+        private void AddLog(string line)
+        {
+            if (line.Length > 4096) line = line[..4096];
+            logs.Enqueue(line);
+            while (logs.Count > 100) logs.TryDequeue(out _);
+            Util.AddLog("[FilterPreview] " + line, null);
         }
 
         private static async Task<string> ReadLineAsync(Stream stream)
@@ -125,6 +128,9 @@ namespace Amatsukaze.Server.Rest
                     if (messageStart >= 0) values["message"] = line[(messageStart + " message=".Length)..];
                     if (!values.TryGetValue("gen", out var generation) || !long.TryParse(generation, out var gen)) throw new IOException("エンジン応答に世代がありません");
                     long id = values.TryGetValue("id", out var value) && long.TryParse(value, out var parsed) ? parsed : 0;
+                    var errorMessage = tokens[1] == "ERROR" ? values.GetValueOrDefault("message", "エンジンエラー") : null;
+                    // stderrの読取順とは独立して、エラーの原因を応答前にログへ入れる。
+                    if (errorMessage != null) AddLog(errorMessage);
                     if (tokens[1] == "VIEW" || tokens[1] == "DONE" || tokens[1] == "ERROR" && pendingViews.ContainsKey((id, gen)))
                     {
                         await ReadViewAsync(stream, tokens[1], line, values, id, gen).ConfigureAwait(false);
@@ -143,7 +149,7 @@ namespace Amatsukaze.Server.Rest
                     {
                         if (pending.TryRemove((id, gen), out var waiter))
                         {
-                            if (tokens[1] == "ERROR") waiter.TrySetException(new IOException(values.GetValueOrDefault("message", "エンジンエラー")));
+                            if (errorMessage != null) waiter.TrySetException(new IOException(errorMessage));
                             else waiter.TrySetResult(new Reply(values, bytes));
                         }
                     }
