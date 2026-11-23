@@ -500,7 +500,14 @@ tstring NicoJK::MakeNicoJKScriptArgs(const tstring& pythonCommand,
         // 録画の探索はnicojk_assが行う。入力ファイル自身は除く。
         args += StringFormat(_T(" --alt %s"), altMode_.c_str());
         for (const auto& dir : getSearchDirs()) {
-            args += StringFormat(_T(" --search-dir \"%s\""), pathToOS(dir));
+            auto searchDir = pathToOS(dir);
+#if defined(_WIN32) || defined(_WIN64)
+            // とてもとても気持ち悪いけどディレクトリを渡すここだけルートディレクトリのエスケープ問題を回避するため特例処理をする
+            if (!searchDir.empty() && searchDir.back() == _T('\\')) {
+                searchDir += _T('\\');
+            }
+#endif
+            args += StringFormat(_T(" --search-dir \"%s\""), searchDir);
         }
         args += StringFormat(_T(" --exclude \"%s\""), pathToOS(setting_.getSrcFileOriginalPath()));
     } else if (hasRef) {
