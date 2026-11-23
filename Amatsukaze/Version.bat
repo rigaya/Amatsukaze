@@ -1,5 +1,6 @@
 @echo off
 setlocal
+rem UTF-8の日本語行は末尾の '.' を残す。CP932のcmdが改行を飲み込んで次行を実行してしまう。.
 
 set "_DST=%~dp0Version.h"
 set "_TMP=%~dp0Version.h.tmp"
@@ -11,7 +12,7 @@ set /a _TRY=0
 2>nul mkdir "%_LOCK%" && goto locked
 set /a _TRY+=1
 if %_TRY% geq 120 (
-    rem 異常終了で残ったロックとみなして削除し、取り直す
+    rem 異常終了で残ったロックとみなして削除し、取り直す.
     echo Version.bat: lock timeout, removing stale lock "%_LOCK%"
     rmdir "%_LOCK%" >nul 2>&1
     set /a _TRY=0

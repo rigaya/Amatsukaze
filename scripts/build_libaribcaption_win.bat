@@ -1,12 +1,13 @@
 @echo off
 setlocal EnableExtensions
+rem UTF-8の日本語行は末尾の '.' を残す。CP932のcmdが改行を飲み込んで次行を実行してしまう。.
 
-rem libaribcaptionを取得・パッチ適用し、Amatsukaze.dllへ静的リンクするライブラリをビルドする。
-rem Amatsukaze.vcxprojのビルド前イベントから呼ばれる。
+rem libaribcaptionを取得・パッチ適用し、Amatsukaze.dllへ静的リンクするライブラリをビルドする。.
+rem Amatsukaze.vcxprojのビルド前イベントから呼ばれる。.
 rem 引数: Platform(x64/Win32) Configuration PlatformToolset VsInstallRoot VisualStudioVersion
-rem バージョンとアーカイブはLinux側(scripts/build_caption_deps.sh)と揃える。
-rem 成果物は build\libaribcaption\<Platform>\<Configuration>\install に出力する。
-rem 入力(バージョン・パッチ・ツールセット等)が前回と同じなら何もしない。
+rem バージョンとアーカイブはLinux側(scripts/build_caption_deps.sh)と揃える。.
+rem 成果物は build\libaribcaption\<Platform>\<Configuration>\install に出力する。.
+rem 入力(バージョン・パッチ・ツールセット等)が前回と同じなら何もしない。.
 
 set "ARIBCC_VERSION=1.1.2"
 set "ARIBCC_SHA256=649b50bde99272b97c66af2a8400163e2f84eae072d252daa26baaaf0866a1c2"
@@ -28,7 +29,7 @@ set "PATCH_DIR=%~dp0patches\libaribcaption-%ARIBCC_VERSION%"
 set "ARIBCC_BASE=%AMT_ROOT%\build\libaribcaption"
 set "ARIBCC_ARCHIVE=%ARIBCC_BASE%\libaribcaption-%ARIBCC_VERSION%.tar.gz"
 set "WORK_DIR=%ARIBCC_BASE%\%AMT_PLATFORM%\%AMT_CONFIG%"
-rem git applyの--directoryはリポジトリ(またはカレント)のルートからの相対パスで指定する
+rem git applyの--directoryはリポジトリ(またはカレント)のルートからの相対パスで指定する.
 set "SRC_REL=build/libaribcaption/%AMT_PLATFORM%/%AMT_CONFIG%/src/libaribcaption-%ARIBCC_VERSION%"
 set "SRC_DIR=%WORK_DIR%\src\libaribcaption-%ARIBCC_VERSION%"
 set "CMAKE_BUILD_DIR=%WORK_DIR%\cmake_build"
@@ -46,7 +47,7 @@ if /i "%AMT_CONFIG:~0,5%"=="Debug" (
   set "CMAKE_RUNTIME=MultiThreaded"
 )
 
-rem 呼び出し元のMSBuildと同じVisual Studioのジェネレータを使う
+rem 呼び出し元のMSBuildと同じVisual Studioのジェネレータを使う.
 set "CMAKE_GENERATOR="
 if "%AMT_VSVER%"=="17.0" set "CMAKE_GENERATOR=Visual Studio 17 2022"
 if "%AMT_VSVER%"=="18.0" set "CMAKE_GENERATOR=Visual Studio 18 2026"
@@ -55,7 +56,7 @@ if "%CMAKE_GENERATOR%"=="" (
   goto :fail
 )
 
-rem Visual Studio同梱のCMake("C++ CMake tools for Windows")を優先し、なければPATHから探す
+rem Visual Studio同梱のCMake("C++ CMake tools for Windows")を優先し、なければPATHから探す.
 set "CMAKE_EXE=%AMT_VSROOT%\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe"
 if not exist "%CMAKE_EXE%" (
   set "CMAKE_EXE="
@@ -69,8 +70,8 @@ if not defined CMAKE_EXE (
 if not exist "%ARIBCC_BASE%" mkdir "%ARIBCC_BASE%"
 if errorlevel 1 goto :fail
 
-rem Release と Release2 が同じ作業ディレクトリを同時に触らないよう排他する。
-rem publish では両方の PreBuild が Configuration=Release でここへ入る。
+rem Release と Release2 が同じ作業ディレクトリを同時に触らないよう排他する。.
+rem publish では両方の PreBuild が Configuration=Release でここへ入る。.
 set "LOCKDIR=%ARIBCC_BASE%\lock_%AMT_PLATFORM%_%AMT_CONFIG%"
 set /a LOCK_TRY=0
 :lock_acquire
@@ -87,7 +88,7 @@ goto :lock_acquire
 :lock_held
 set "LOCKHELD=1"
 
-rem 今回の入力をスタンプとして書き出し、前回ビルド時のスタンプと比較する
+rem 今回の入力をスタンプとして書き出し、前回ビルド時のスタンプと比較する.
 > "%STAMP_NEW%" (
   echo version=%ARIBCC_VERSION%
   echo sha256=%ARIBCC_SHA256%
@@ -131,7 +132,7 @@ if /i not "%ARCHIVE_HASH%"=="%ARIBCC_SHA256%" (
   goto :fail
 )
 
-rem パッチ適用済みのソースを再利用しないよう、毎回展開し直す
+rem パッチ適用済みのソースを再利用しないよう、毎回展開し直す.
 if exist "%WORK_DIR%" rmdir /s /q "%WORK_DIR%"
 mkdir "%WORK_DIR%\src"
 if errorlevel 1 goto :fail
@@ -192,13 +193,13 @@ if defined LOCKHELD rmdir "%LOCKDIR%" >nul 2>&1
 set "LOCKHELD="
 exit /b 0
 
-rem パッチのファイル名とSHA256をスタンプへ追記する
+rem パッチのファイル名とSHA256をスタンプへ追記する.
 :append_patch_stamp
 call :sha256 "%~1" PATCH_HASH
 >> "%STAMP_NEW%" echo patch=%~nx1 %PATCH_HASH%
 exit /b 0
 
-rem ファイルのSHA256を小文字16進(空白なし)で第2引数の変数へ設定する
+rem ファイルのSHA256を小文字16進(空白なし)で第2引数の変数へ設定する.
 :sha256
 set "%~2="
 for /f "skip=1 delims=" %%H in ('certutil -hashfile "%~1" SHA256') do if not defined %~2 set "%~2=%%H"

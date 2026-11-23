@@ -1,5 +1,6 @@
 @echo off
 setlocal
+rem UTF-8の日本語行は末尾の '.' を残す。CP932のcmdが改行を飲み込んで次行を実行してしまう。.
 
 cd /d "%~dp0"
 if errorlevel 1 (
@@ -78,17 +79,17 @@ echo [%time%] Building native and .NET in parallel via Publish.proj...
 "%MSBUILD%" Publish.proj /m
 if errorlevel 1 exit /b %ERRORLEVEL%
 if not exist ".\x64\Release\Amatsukaze.dll" (
-  echo Amatsukaze.dll がありません。
+  echo Amatsukaze.dll がありません。.
   exit /b 1
 )
 if not exist ".\x64\Release2\Amatsukaze2.dll" (
-  echo Amatsukaze2.dll がありません。
+  echo Amatsukaze2.dll がありません。.
   exit /b 1
 )
 
 echo [%time%] Collecting published artifacts into a single folder...
 set MERGED_DIR=.\publish\win-x64
-rem publish 出力は消さずに残し、再実行では増分 publish にする。まとめ先だけ毎回空にする。
+rem publish 出力は消さずに残し、再実行では増分 publish にする。まとめ先だけ毎回空にする。.
 set SRC_BASE=.\publish\intermediate\win-x64
 
 rem robocopy returns codes <8 for success; treat >=8 as failure

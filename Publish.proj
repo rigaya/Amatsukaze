@@ -158,8 +158,10 @@
   -->
   <Target Name="RestoreDotNet">
     <Message Importance="high" Text="dotnet: restore $([System.DateTime]::Now.ToString('HH:mm:ss'))" />
-    <!-- アプリ同士は同じプロパティで restore し、WebUI とは段を分ける。project.assets.json の同時書き込みを避ける。 -->
-    <MSBuild Projects="@(DotNetApp)" Targets="Restore" BuildInParallel="true" Properties="$(DotNetAppBuildProps)" />
+    <!-- 各アプリは AmatsukazeServer / AmatsukazeShared の project.assets.json を書き直す。
+         並列にすると NuGet が「既に存在するファイルを作成することはできません」で失敗する。
+         WebUI も Shared を書くので、アプリの後に続ける。 -->
+    <MSBuild Projects="@(DotNetApp)" Targets="Restore" BuildInParallel="false" Properties="$(DotNetAppBuildProps)" />
     <MSBuild Projects="@(DotNetWebUi)" Targets="Restore" Properties="$(DotNetWebBuildProps)" />
   </Target>
 
