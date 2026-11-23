@@ -126,7 +126,7 @@ public partial class FilterAdjust
                 request.Content = JsonContent.Create(new
                 {
                     gen, operation.Op, operation.Seconds, operation.Phase, operation.Direction,
-                    operation.Mode, frameOptions.Format, frameOptions.Scale, frameOptions.Crop
+                    operation.Mode, frameOptions.Format, frameOptions.Crop
                 }, options: ViewRequestJson);
                 request.SetBrowserResponseStreamingEnabled(true);
                 using var response = await Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, token);
@@ -247,7 +247,7 @@ public partial class FilterAdjust
         if (!current()) return;
         if ((after ?? before)?.Frame is { } display)
         {
-            double height = options.Crop?[3] ?? (double)display.Height * options.Scale;
+            double height = options.Crop?[3] ?? display.Height;
             double sar = display.Sarnum > 0 && display.Sarden > 0 ? (double)display.Sarnum / display.Sarden : 1;
             double dar = _inputDar > 0 ? _inputDar : display.Width * sar / display.Height;
             await _viewer!.InvokeVoidAsync("present", view, height * dar, height);

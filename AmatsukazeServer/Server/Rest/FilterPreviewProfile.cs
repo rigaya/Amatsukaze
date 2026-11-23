@@ -15,6 +15,12 @@ namespace Amatsukaze.Server.Rest
             result.QSVEncFilterOption = edited.QSVEncFilterOption;
             result.NVEncFilterOption = edited.NVEncFilterOption;
             result.VCEEncFilterOption = edited.VCEEncFilterOption;
+            if (edited.FilterOption == FilterOption.Custom)
+            {
+                // カスタムを保持するときは、元のセッションが使うスクリプトも引き継ぐ。
+                result.FilterPath = edited.FilterPath;
+                result.PostFilterPath = edited.PostFilterPath;
+            }
             return result;
         }
     }

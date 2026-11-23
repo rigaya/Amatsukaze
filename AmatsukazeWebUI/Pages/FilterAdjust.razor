@@ -27,13 +27,6 @@
                         disabled="@(!CanOperate)" @onclick="() => SetViewAsync(value)">@label</button>
             }
         </div>
-        <div class="fa-segment" role="group" aria-label="縮小">
-            @foreach (var (value, label) in ScaleChoices)
-            {
-                <button type="button" class="@(_scale == value ? "is-active" : "")" aria-pressed="@(_scale == value)"
-                        disabled="@(!CanOperate)" @onclick="() => SetScaleAsync(value)">@label</button>
-            }
-        </div>
         <div class="fa-segment" role="group" aria-label="拡大">
             <button type="button" @ref="_fitButton" disabled="@(!CanOperate)">全体</button>
             <button type="button" @ref="_actualSizeButton" disabled="@(!CanOperate)">等倍</button>
@@ -193,7 +186,7 @@
         <aside class="fa-side">
             <div class="fa-side-head">
                 <label for="fa-filter-kind">フィルタ設定</label>
-                <select id="fa-filter-kind" value="@FilterKind" @onchange="KindChangedAsync" disabled="@(_expired)">
+                <select id="fa-filter-kind" value="@FilterKind" @onchange="KindChangedAsync" disabled="@(_expired || _saving)">
                     <option value="None">フィルタなし</option>
                     <option value="Setting">AviSynthフィルタ</option>
                     <option value="QSVEncFilter">QSVEncフィルタ</option>
@@ -219,10 +212,25 @@
             </div>
             @* 保存は右列の下に固定し、設定欄を長くスクロールしても届くようにする *@
             <div class="fa-side-foot">
+                <div class="fa-save-target">
+                    <label for="fa-save-target">上書き先</label>
+                    <select id="fa-save-target" @bind="_saveTarget" disabled="@(!Ready || _saving || _profileNames.Length == 0)">
+                        <option value="">選択してください</option>
+                        @foreach (var name in _profileNames)
+                        {
+                            <option value="@name">@name</option>
+                        }
+                    </select>
+                </div>
+                @if (_profileListError != null)
+                {
+                    <div class="fa-status-error" role="alert">@_profileListError</div>
+                }
                 <button type="button" class="fa-btn fa-btn-primary" @onclick="() => SaveAsync(false)"
-                        disabled="@(!Ready || _saving)" title="元のプロファイルのフィルタ設定を上書きします">プロファイルへ保存</button>
+                        disabled="@(!CanOverwrite)" title="選んだプロファイルのフィルタ設定を上書きします">プロファイルへ保存</button>
                 <div class="fa-save-as">
-                    <input aria-label="別名のプロファイル名" placeholder="新しいプロファイル名" @bind="_saveName" @bind:event="oninput" />
+                    <input aria-label="別名のプロファイル名" placeholder="新しいプロファイル名"
+                           @bind="_saveName" @bind:event="oninput" disabled="@(_saving)" />
                     <button type="button" class="fa-btn" @onclick="() => SaveAsync(true)"
                             disabled="@(!Ready || _saving || string.IsNullOrWhiteSpace(_saveName))">別名で保存</button>
                 </div>

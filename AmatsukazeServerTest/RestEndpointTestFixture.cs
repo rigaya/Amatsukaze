@@ -17,9 +17,10 @@ internal sealed class RestEndpointTestFixture : IAsyncDisposable
     public IReadOnlyList<RouteEndpoint> Endpoints => ((IEndpointRouteBuilder)app).DataSources
         .SelectMany(source => source.Endpoints).OfType<RouteEndpoint>().ToList();
 
-    public RestEndpointTestFixture()
+    public RestEndpointTestFixture(Func<RestStateStore, FilterPreviewService>? createFilterPreview = null)
     {
-        host = Queue.CreateRestHost();
+        host = createFilterPreview == null ? Queue.CreateRestHost()
+            : new RestApiHost(Queue.Server, Queue.Store, 0, createFilterPreview(Queue.Store));
         try
         {
             // 本番登録とJSON設定を使う。待受けを開始せずHTTP接続も作らない。
@@ -74,7 +75,7 @@ internal sealed class RestFileSystemFixture : IAsyncDisposable
     public Dictionary<string, ProfileSetting> Profiles { get; } = new(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, AutoSelectProfile> AutoSelects { get; } = new(StringComparer.OrdinalIgnoreCase);
 
-    public RestFileSystemFixture()
+    public RestFileSystemFixture(Func<RestStateStore, FilterPreviewService>? createFilterPreview = null)
     {
         previousDirectory = Directory.GetCurrentDirectory();
         Root = Path.Combine(Path.GetTempPath(), "amt-rest-api-" + Guid.NewGuid().ToString("N"));
@@ -84,7 +85,7 @@ internal sealed class RestFileSystemFixture : IAsyncDisposable
         {
             foreach (var name in new[] { "profile", "config", "logo", "drcs", "data", "work" })
                 Directory.CreateDirectory(Path.Combine(Root, name));
-            Api = new RestEndpointTestFixture();
+            Api = new RestEndpointTestFixture(createFilterPreview);
             var server = Api.Queue.Server;
             var data = new EncodeServer.AppData
             {

@@ -46,7 +46,7 @@
     color: var(--muted);
 }
 
-/* 押しボタンの組(表示・縮小・転送) */
+/* 押しボタンの組(表示・拡大・転送) */
 .fa-segment {
     display: inline-flex;
     border: 1px solid var(--input-border, var(--fa-line));
@@ -549,11 +549,21 @@
     background: var(--glass-strong, var(--bg-surface));
 }
 
+.fa-save-target,
 .fa-save-as {
     display: flex;
     gap: 6px;
 }
 
+.fa-save-target {
+    align-items: center;
+}
+
+.fa-save-target label {
+    white-space: nowrap;
+}
+
+.fa-save-target select,
 .fa-save-as input {
     flex: 1;
     min-width: 0;

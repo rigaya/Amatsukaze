@@ -107,6 +107,9 @@ namespace Amatsukaze.Server.Rest
         }
 
         public RestApiHost(EncodeServer server, RestStateStore state, int port)
+            : this(server, state, port, new FilterPreviewService(state)) { }
+
+        internal RestApiHost(EncodeServer server, RestStateStore state, int port, FilterPreviewService filterPreview)
         {
             this.server = server;
             this.state = state;
@@ -114,7 +117,7 @@ namespace Amatsukaze.Server.Rest
             logoAnalyze = new LogoAnalyzeService(server, state);
             logoPreview = new LogoPreviewService(state);
             trimAdjust = new TrimAdjustService(server, state);
-            filterPreview = new FilterPreviewService(state);
+            this.filterPreview = filterPreview;
         }
 
         // スタンドアロンでは true。サーバー/CLIは指定ポートで失敗したらエラーにする。
@@ -2044,7 +2047,7 @@ namespace Amatsukaze.Server.Rest
                 try
                 {
                     var edited = await filterPreview.GetEditedProfileAsync(sessionId, context.RequestAborted, data.PreserveCustomFilter);
-                    await server.SaveFilterPreviewProfile(edited, data.Name, data.SaveAs);
+                    await server.SaveFilterPreviewProfile(edited, data.Name, data.SaveAs, data.Target);
                     return Results.Ok();
                 }
                 catch (KeyNotFoundException) { return Results.NotFound(); }

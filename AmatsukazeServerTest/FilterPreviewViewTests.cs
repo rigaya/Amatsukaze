@@ -163,7 +163,7 @@ public class FilterPreviewViewTests
         Assert.Equal(expected, actual);
     }
 
-    private sealed class Peer : IDisposable
+    internal sealed class Peer : IDisposable
     {
         private readonly Pipe output = new();
         private readonly CommandWriter input = new();

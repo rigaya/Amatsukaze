@@ -13,6 +13,7 @@ namespace Amatsukaze.Server.Rest
     public sealed class FilterPreviewConfigRequest
     {
         public long Gen { get; set; }
+        public string Name { get; set; }
         public FilterOption FilterOption { get; set; }
         public FilterSetting FilterSetting { get; set; }
         public EncoderFilterSetting EncoderFilterSetting { get; set; }
@@ -26,6 +27,7 @@ namespace Amatsukaze.Server.Rest
         public bool SaveAs { get; set; }
         public bool PreserveCustomFilter { get; set; }
         public string Name { get; set; }
+        public string Target { get; set; }
     }
 
     public sealed class FilterPreviewFrameRequest
@@ -33,7 +35,6 @@ namespace Amatsukaze.Server.Rest
         public long Gen { get; set; }
         public int Pos { get; set; }
         public string Side { get; set; } = "after";
-        public int Scale { get; set; } = 1;
         public string Format { get; set; } = "yuv";
         public int[] Crop { get; set; }
         public int? Step { get; set; }
@@ -49,17 +50,16 @@ namespace Amatsukaze.Server.Rest
         public string Direction { get; set; }
         public string Mode { get; set; }
         public long? Revision { get; set; }
-        public int Scale { get; set; } = 1;
         public string Format { get; set; } = "yuv";
         public int[] Crop { get; set; }
 
         internal Dictionary<string, object> ToCommand()
         {
-            if (Scale is < 1 or > 16 || Format is not ("yuv" or "jpeg" or "png")
+            if (Format is not ("yuv" or "jpeg" or "png")
                 || Crop != null && (Crop.Length != 4 || Crop[0] < 0 || Crop[1] < 0 || Crop[2] <= 0 || Crop[3] <= 0))
                 throw new ArgumentException("表示画像の転送形式が不正です");
 
-            var command = new Dictionary<string, object> { ["op"] = Op, ["scale"] = Scale, ["format"] = Format };
+            var command = new Dictionary<string, object> { ["op"] = Op, ["format"] = Format };
             if (Crop != null) command["crop"] = Crop;
             switch (Op)
             {
@@ -127,6 +127,7 @@ namespace Amatsukaze.Server.Rest
         private static readonly TimeSpan Ttl = TimeSpan.FromMinutes(5);
         private readonly RestStateStore state;
         private readonly Func<string, FilterPreviewSourceFormat> readSourceFormat;
+        private readonly Func<string, IEnumerable<string>, FilterPreviewEngine> createEngine;
         private readonly ConcurrentDictionary<string, Session> sessions = new();
         private readonly FilterPreviewEngineTiming timing;
         private readonly ITimer timer;
@@ -134,11 +135,12 @@ namespace Amatsukaze.Server.Rest
         public FilterPreviewService(RestStateStore state) : this(state, FilterPreviewSourceReader.Read) { }
 
         internal FilterPreviewService(RestStateStore state, Func<string, FilterPreviewSourceFormat> readSourceFormat,
-            FilterPreviewEngineTiming timing = null)
+            FilterPreviewEngineTiming timing = null, Func<string, IEnumerable<string>, FilterPreviewEngine> createEngine = null)
         {
             this.state = state;
             this.readSourceFormat = readSourceFormat;
             this.timing = timing ?? FilterPreviewEngineTiming.Default;
+            this.createEngine = createEngine ?? ((executable, args) => new FilterPreviewEngine(executable, args, this.timing));
             timer = this.timing.Clock.CreateTimer(_ => Cleanup(), null, Ttl, Ttl);
         }
 
@@ -176,7 +178,7 @@ namespace Amatsukaze.Server.Rest
             var id = Guid.NewGuid().ToString("N");
             var workDirectory = Path.Combine(dir, id);
             var profile = ServerSupport.DeepCopy(item.Profile);
-            var engine = new FilterPreviewEngine(executable, args, timing);
+            var engine = createEngine(executable, args);
             try { System.IO.Directory.CreateDirectory(workDirectory); }
             catch { engine.Dispose(); throw; }
             var session = new Session(timing.Clock) { OriginalFilterOption = profile.FilterOption, SourceName = item.SrcPath?[(item.SrcPath.LastIndexOfAny(new[] { '/', '\\' }) + 1)..], Id = id, Directory = dir, WorkDirectory = workDirectory, Dat = dat, ModuleDirectory = module, Profile = profile, Setting = setting, Format = format, Engine = engine };
@@ -305,8 +307,8 @@ namespace Amatsukaze.Server.Rest
             await session.ConfigLock.WaitAsync(cancellation).ConfigureAwait(false);
             try { ValidateKind(session, request.Gen, encoder: false); }
             finally { session.ConfigLock.Release(); }
-            if (request.Pos < 0 || (request.Side != "before" && request.Side != "after") || request.Scale < 1 || request.Scale > 16 || (request.Format != "yuv" && request.Format != "jpeg" && request.Format != "png") || (request.Crop != null && request.Crop.Length != 4) || (request.Step.HasValue && request.Step != -1 && request.Step != 1)) throw new ArgumentException("フレーム要求が不正です");
-            var cmd = new Dictionary<string, object> { ["cmd"] = "frame", ["pos"] = request.Pos, ["side"] = request.Side, ["scale"] = request.Scale, ["format"] = request.Format, ["decimate"] = request.Decimate };
+            if (request.Pos < 0 || (request.Side != "before" && request.Side != "after") || (request.Format != "yuv" && request.Format != "jpeg" && request.Format != "png") || (request.Crop != null && request.Crop.Length != 4) || (request.Step.HasValue && request.Step != -1 && request.Step != 1)) throw new ArgumentException("フレーム要求が不正です");
+            var cmd = new Dictionary<string, object> { ["cmd"] = "frame", ["pos"] = request.Pos, ["side"] = request.Side, ["format"] = request.Format, ["decimate"] = request.Decimate };
             if (request.Crop != null) cmd["crop"] = request.Crop;
             if (request.Step.HasValue) cmd["step"] = request.Step.Value;
             string cacheKey = null;
@@ -314,7 +316,7 @@ namespace Amatsukaze.Server.Rest
             {
                 var generationKey = request.Side == "before" && !request.Step.HasValue && session.CommittedGeneration == request.Gen
                     ? "before:" + session.FpsKey : "gen:" + request.Gen;
-                cacheKey = string.Join("|", generationKey, request.Pos, request.Side, request.Scale, request.Step, request.Decimate, request.Crop == null ? "" : string.Join(",", request.Crop));
+                cacheKey = string.Join("|", generationKey, request.Pos, request.Side, request.Step, request.Decimate, request.Crop == null ? "" : string.Join(",", request.Crop));
                 if (session.JpegCache.TryGetValue(cacheKey, out var cached))
                 {
                     var metadata = cached.Metadata.ToDictionary(pair => pair.Key, pair => pair.Value);
@@ -364,7 +366,7 @@ namespace Amatsukaze.Server.Rest
                 var profile = ServerSupport.DeepCopy(session.Profile);
                 return new FilterPreviewConfigRequest
                 {
-                    Gen = session.Generation, FilterOption = profile.FilterOption,
+                    Gen = session.Generation, Name = profile.Name, FilterOption = profile.FilterOption,
                     FilterSetting = profile.FilterSetting, EncoderFilterSetting = profile.EncoderFilterSetting,
                     QSVEncFilterOption = profile.QSVEncFilterOption, NVEncFilterOption = profile.NVEncFilterOption,
                     VCEEncFilterOption = profile.VCEEncFilterOption

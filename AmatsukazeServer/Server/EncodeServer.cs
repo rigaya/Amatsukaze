@@ -3781,18 +3781,24 @@ namespace Amatsukaze.Server
             }
         }
 
-        public Task SaveFilterPreviewProfile(ProfileSetting edited, string destination, bool saveAs)
+        public Task SaveFilterPreviewProfile(ProfileSetting edited, string destination, bool saveAs, string target = null)
         {
             if (edited == null || string.IsNullOrWhiteSpace(edited.Name))
                 throw new ArgumentException("元のプロファイルが指定されていません");
-            if (!profiles.TryGetValue(edited.Name, out var original))
-                throw new InvalidOperationException("元のプロファイルが見つかりません");
-            var name = saveAs ? destination : edited.Name;
+            var name = saveAs ? destination : target ?? edited.Name;
             if (string.IsNullOrWhiteSpace(name) || name == "." || name == ".." || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || name.Contains('/') || name.Contains('\\'))
                 throw new ArgumentException("プロファイル名が不正です");
+            var sourceName = saveAs ? edited.Name : name;
+            if (!profiles.TryGetValue(sourceName, out var source))
+            {
+                if (saveAs || target == null)
+                    throw new InvalidOperationException("元のプロファイルが見つかりません");
+                throw new InvalidOperationException("上書き先のプロファイル「" + sourceName + "」が見つかりません");
+            }
+            if (!saveAs) name = source.Name;
             if (saveAs && (profiles.ContainsKey(name) || File.Exists(GetProfilePath(GetProfileDirectoryPath(), name))))
                 throw new InvalidOperationException("同じ名前のプロファイルが既に存在します");
-            var profile = Amatsukaze.Server.Rest.FilterPreviewProfile.Apply(original, edited, name);
+            var profile = Amatsukaze.Server.Rest.FilterPreviewProfile.Apply(source, edited, name);
             CheckDoubleDeinterlace(profile);
             var path = GetProfilePath(GetProfileDirectoryPath(), name);
             SaveProfile(path, profile);

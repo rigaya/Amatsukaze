@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using System.Reflection;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Amatsukaze.Shared;
 using Microsoft.AspNetCore.Components;
@@ -27,9 +28,9 @@ public partial class FilterAdjust
     private IJSObjectReference? _renderer, _lifecycle, _canvasLifetime, _viewerModule, _viewer;
     private DotNetObjectReference<FilterAdjust>? _callback;
     private ElementReference _beforeCanvas, _afterCanvas, _viewport, _imageLayer, _divider, _fitButton, _actualSizeButton, _zoomLabel;
-    private string? _sessionId, _error;
-    private string _status = "読み込み中…", _view = "after", _displayedView = "after", _scale = "1", _quality = "yuv", _saveName = "";
-    private string[] _notices = [], _logs = [];
+    private string? _sessionId, _error, _profileListError;
+    private string _status = "読み込み中…", _view = "after", _displayedView = "after", _quality = "yuv", _saveName = "", _saveTarget = "";
+    private string[] _notices = [], _logs = [], _profileNames = [];
     private long _generation, _committedGeneration, _frameRevision, _seekRevision;
     private int? _activeSeek, _pendingSeek;
     private bool _seeking;
@@ -38,7 +39,6 @@ public partial class FilterAdjust
     private double? _pendingAviSynthSeconds;
     private bool _decimate = true, _pngFallback, _expired, _disposed, _saving, _cropEnabled;
     private static readonly (string Value, string Label)[] ViewChoices = [("after", "フィルタ後"), ("before", "フィルタ前"), ("compare", "左右比較")];
-    private static readonly (string Value, string Label)[] ScaleChoices = [("1", "1/1"), ("2", "1/2")];
     private string? _sourceName;
     private string FrameTypeLabel = "";
     private bool? FrameKept;
@@ -51,6 +51,7 @@ public partial class FilterAdjust
     private bool _busy => _reopening || _configurationCancellation != null || _frameCancellation != null || _seeking;
     private bool _fetchingFrame => _frameCancellation is { IsCancellationRequested: false };
     private bool Ready => CanOperate && _generation == _committedGeneration;
+    private bool CanOverwrite => Ready && !_saving && !string.IsNullOrEmpty(_saveTarget);
     private string SessionUrl => $"{Root}/{_sessionId}";
     private string FilterKind => Node(_profile, "FilterOption")?.ToString() ?? "None";
     private bool IsEncoder => FilterKind.EndsWith("EncFilter", StringComparison.Ordinal);
@@ -110,6 +111,7 @@ public partial class FilterAdjust
             if (CustomReplaced) Set(_profile, "FilterOption", JsonValue.Create("None"));
             else if (int.TryParse(FilterKind, out var filterIndex))
                 Set(_profile, "FilterOption", JsonValue.Create(filterIndex switch { 1 => "Setting", 3 => "QSVEncFilter", 4 => "NVEncFilter", 5 => "VCEEncFilter", _ => "None" }));
+            await LoadProfileTargetsAsync(Node(_profile, "Name")?.ToString(), _lifetime.Token);
             await SettingsChangedAsync();
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
@@ -134,7 +136,7 @@ public partial class FilterAdjust
         {
             var text = await response.Content.ReadAsStringAsync(token);
             token.ThrowIfCancellationRequested();
-            try { text = JsonNode.Parse(text)?["message"]?.ToString() ?? text; } catch (System.Text.Json.JsonException) { }
+            try { text = JsonNode.Parse(text)?["message"]?.ToString() ?? text; } catch (JsonException) { }
             throw new InvalidOperationException(string.IsNullOrWhiteSpace(text) ? $"操作に失敗しました({(int)response.StatusCode})" : text);
         }
     }
@@ -237,7 +239,7 @@ public partial class FilterAdjust
             return;
         }
         // リサイズ済みプロファイルで開いた場合だけ、加工前フレームのヘッダから入力DARを求める。
-        using var response = await Http.PostAsJsonAsync(SessionUrl + "/frame", new { gen, pos = 0, side = "before", scale = 1, format = "jpeg", decimate = false }, token);
+        using var response = await Http.PostAsJsonAsync(SessionUrl + "/frame", new { gen, pos = 0, side = "before", format = "jpeg", decimate = false }, token);
         await CheckAsync(response, token);
         _ = await response.Content.ReadAsByteArrayAsync(token);
         if (gen != _generation || token.IsCancellationRequested) return;
@@ -261,7 +263,6 @@ public partial class FilterAdjust
         _view = value;
         return IsEncoder ? StartEncoderViewAsync(new("display", Mode: EncoderDisplayMode)) : RefreshAsync();
     }
-    private Task SetScaleAsync(string value) { _scale = value; return RefreshAsync(); }
     private Task SetQualityAsync(string value) { _quality = value; return QualityChangedAsync(); }
     private async Task OnKeyDown(KeyboardEventArgs e)
     {
@@ -374,7 +375,7 @@ public partial class FilterAdjust
             if (!Current()) return;
             // 比較中はフィルタ後の原寸に合わせ、前後を同じ入力DARで描く。
             var display = view == "before" ? before! : after!;
-            var height = options.Crop?[3] ?? display.Height * options.Scale;
+            var height = options.Crop?[3] ?? display.Height;
             var dar = _inputDar > 0 ? _inputDar : display.Width * display.Sar / display.Height;
             await _viewer!.InvokeVoidAsync("present", view, height * dar, height);
             if (!Current()) return;
@@ -401,7 +402,7 @@ public partial class FilterAdjust
             FinishFrameRequest(cancellation);
         }
     }
-    private sealed record FrameOptions(int Scale, string Format, int[]? Crop, bool Decimate);
+    private sealed record FrameOptions(string Format, int[]? Crop, bool Decimate);
     private sealed record PreviewFrame(byte[] Data, Dictionary<string, string> Metadata, string? Mime, int Position,
         HttpResponseMessage? Response = null, Stream? Body = null) : IDisposable
     {
@@ -429,13 +430,13 @@ public partial class FilterAdjust
                 throw new InvalidOperationException("切り出し範囲には正の寸法と偶数の開始位置・寸法を指定してください");
             crop = [_cropX, _cropY, _cropWidth, _cropHeight];
         }
-        return new FrameOptions(_scale == "2" ? 2 : 1, format, crop, _decimate);
+        return new FrameOptions(format, crop, _decimate);
     }
     private async Task<PreviewFrame> FetchFrameAsync(string side, int pos, int? step, long gen, FrameOptions options, CancellationToken token)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, SessionUrl + "/frame")
         {
-            Content = JsonContent.Create(new { gen, pos, side, scale = options.Scale, format = options.Format,
+            Content = JsonContent.Create(new { gen, pos, side, format = options.Format,
                 crop = options.Crop, step, decimate = options.Decimate })
         };
         bool yuv = options.Format == "yuv";
@@ -562,19 +563,56 @@ public partial class FilterAdjust
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
         catch (Exception ex) { if (!token.IsCancellationRequested) ShowError(ex); }
     }
-    private async Task SaveAsync(bool saveAs)
+    private async Task LoadProfileTargetsAsync(string? preferredName, CancellationToken token)
+    {
+        var result = await Api.GetProfilesAsync().WaitAsync(token);
+        token.ThrowIfCancellationRequested();
+        if (!result.Ok || result.Data == null)
+        {
+            _profileListError = "プロファイル一覧を取得できません";
+            return;
+        }
+        _profileListError = null;
+        _profileNames = result.Data.Select(GetProfileName).OfType<string>().Where(name => !string.IsNullOrWhiteSpace(name)).ToArray();
+        _saveTarget = _profileNames.FirstOrDefault(name => string.Equals(name, preferredName, StringComparison.OrdinalIgnoreCase)) ?? "";
+    }
+    private static string? GetProfileName(JsonElement profile)
+        => profile.ValueKind == JsonValueKind.Object
+            && (profile.TryGetProperty("Name", out var value) || profile.TryGetProperty("name", out value))
+            && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+
+    private Task SaveAsync(bool saveAs) => TrackAsync(SaveCoreAsync(saveAs));
+
+    private async Task SaveCoreAsync(bool saveAs)
     {
         if (!Ready || _saving) return;
+        string selectedName = saveAs ? _saveName : _saveTarget;
+        if (string.IsNullOrWhiteSpace(selectedName)) return;
         var token = _sessionCancellation.Token;
-        if (!await JS.InvokeAsync<bool>("confirm", saveAs ? $"「{_saveName}」として保存しますか？" : "元のプロファイルのフィルタ設定を上書きしますか？")) return;
         _saving = true;
         try
         {
+            string message = saveAs ? $"「{selectedName}」として保存しますか？" : $"プロファイル「{selectedName}」のフィルタ設定を上書きしますか？";
+            if (!await JS.InvokeAsync<bool>("confirm", token, message)) return;
             await _configurationTask;
             if (!Ready) return;
-            using var response = await Http.PostAsJsonAsync(SessionUrl + "/save", new { saveAs, name = _saveName, preserveCustomFilter = CustomReplaced }, token);
+            using var response = await Http.PostAsJsonAsync(SessionUrl + "/save", new
+            {
+                saveAs,
+                name = saveAs ? selectedName : null,
+                target = saveAs ? null : selectedName,
+                preserveCustomFilter = CustomReplaced
+            }, token);
             await CheckAsync(response, token);
             _error = null; _status = "プロファイルへ保存しました";
+            if (saveAs)
+            {
+                _saveName = "";
+                if (!_profileNames.Contains(selectedName, StringComparer.Ordinal))
+                    _profileNames = [.. _profileNames, selectedName];
+                _saveTarget = selectedName;
+                await LoadProfileTargetsAsync(selectedName, token);
+            }
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
         catch (Exception ex) { if (!token.IsCancellationRequested) ShowError(ex); }
