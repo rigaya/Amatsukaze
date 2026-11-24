@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="300" viewBox="0 0 1000 300" font-family="'Noto Sans CJK JP','Yu Gothic','Meiryo',sans-serif">
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#3AAE8C"/></marker></defs>
+<rect x="20" y="20" width="180" height="90" rx="8" fill="#E8F8F2" stroke="#8FD6BF" stroke-width="1.5"/>
+<text x="110.0" y="52.0" text-anchor="middle" font-size="15" font-weight="bold" fill="#1F4D40">対象の録画</text>
+<text x="110.0" y="72.0" text-anchor="middle" font-size="12.5" fill="#4F7D70">エンコードするTS(AT-Xなど)</text>
+<text x="110.0" y="90.0" text-anchor="middle" font-size="12.5" fill="#4F7D70">局のコメントが少ない</text>
+<rect x="240" y="20" width="130" height="90" rx="8" fill="#C9F0E2" stroke="#8FD6BF" stroke-width="1.5"/>
+<text x="305.0" y="52.0" text-anchor="middle" font-size="15" font-weight="bold" fill="#1F4D40">音声の照合</text>
+<text x="305.0" y="72.0" text-anchor="middle" font-size="12.5" fill="#4F7D70">区間ごとのずれで</text>
+<text x="305.0" y="90.0" text-anchor="middle" font-size="12.5" fill="#4F7D70">時刻を合わせる</text>
+<rect x="410" y="20" width="180" height="90" rx="8" fill="#E8F8F2" stroke="#8FD6BF" stroke-width="1.5"/>
+<text x="500.0" y="52.0" text-anchor="middle" font-size="15" font-weight="bold" fill="#1F4D40">別の局の録画</text>
+<text x="500.0" y="72.0" text-anchor="middle" font-size="12.5" fill="#4F7D70">録画フォルダにある(BSなど)</text>
+<text x="500.0" y="90.0" text-anchor="middle" font-size="12.5" fill="#4F7D70">局のコメントが多い</text>
+<rect x="630" y="20" width="130" height="90" rx="8" fill="#C9F0E2" stroke="#8FD6BF" stroke-width="1.5"/>
+<text x="695.0" y="52.0" text-anchor="middle" font-size="15" font-weight="bold" fill="#1F4D40">コメントの照合</text>
+<text x="695.0" y="72.0" text-anchor="middle" font-size="12.5" fill="#4F7D70">コメントの一致度で</text>
+<text x="695.0" y="90.0" text-anchor="middle" font-size="12.5" fill="#4F7D70">時刻を合わせる</text>
+<rect x="800" y="20" width="180" height="90" rx="8" fill="#E8F8F2" stroke="#8FD6BF" stroke-width="1.5"/>
+<text x="890.0" y="52.0" text-anchor="middle" font-size="15" font-weight="bold" fill="#1F4D40">いちばん早い別放送</text>
+<text x="890.0" y="72.0" text-anchor="middle" font-size="12.5" fill="#4F7D70">録画がない(地上波など)</text>
+<text x="890.0" y="90.0" text-anchor="middle" font-size="12.5" fill="#4F7D70">局のコメントが多い</text>
+<polyline points="200,65.0 240,65.0" fill="none" stroke="#3AAE8C" stroke-width="2" marker-start="url(#a)" marker-end="url(#a)"/>
+<polyline points="370,65.0 410,65.0" fill="none" stroke="#3AAE8C" stroke-width="2" marker-start="url(#a)" marker-end="url(#a)"/>
+<polyline points="590,65.0 630,65.0" fill="none" stroke="#3AAE8C" stroke-width="2" marker-start="url(#a)" marker-end="url(#a)"/>
+<polyline points="760,65.0 800,65.0" fill="none" stroke="#3AAE8C" stroke-width="2" marker-start="url(#a)" marker-end="url(#a)"/>
+<rect x="20" y="160" width="960" height="56" rx="8" fill="#C9F0E2" stroke="#8FD6BF" stroke-width="1.5"/>
+<text x="500.0" y="184.0" text-anchor="middle" font-size="15" font-weight="bold" fill="#1F4D40">統合 / 差し替え</text>
+<text x="500.0" y="204.0" text-anchor="middle" font-size="12.5" fill="#4F7D70">3つの局のコメントを混ぜる(差し替えでは、対象の局のコメントは使わない)</text>
+<rect x="800" y="240" width="180" height="50" rx="8" fill="#E8F8F2" stroke="#8FD6BF" stroke-width="1.5"/>
+<text x="890.0" y="261.0" text-anchor="middle" font-size="15" font-weight="bold" fill="#1F4D40">出力</text>
+<text x="890.0" y="281.0" text-anchor="middle" font-size="12.5" fill="#4F7D70">ASS字幕</text>
+<polyline points="110.0,110 110.0,160" fill="none" stroke="#3AAE8C" stroke-width="2" marker-end="url(#a)"/>
+<text x="118.0" y="140" text-anchor="start" font-size="12.5" fill="#4F7D70">対象の局のコメント</text>
+<polyline points="500.0,110 500.0,160" fill="none" stroke="#3AAE8C" stroke-width="2" marker-end="url(#a)"/>
+<text x="508.0" y="140" text-anchor="start" font-size="12.5" fill="#4F7D70">別の局のコメント</text>
+<polyline points="890.0,110 890.0,160" fill="none" stroke="#3AAE8C" stroke-width="2" marker-end="url(#a)"/>
+<text x="882.0" y="140" text-anchor="end" font-size="12.5" fill="#4F7D70">いちばん早い別放送のコメント</text>
+<polyline points="890.0,216 890.0,240" fill="none" stroke="#3AAE8C" stroke-width="2" marker-end="url(#a)"/>
+</svg>
