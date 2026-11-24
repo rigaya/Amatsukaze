@@ -117,6 +117,9 @@ namespace Amatsukaze.Server
         // ロゴファイルやJLSコマンドファイルを監視するスレッド
         private Task watchFileThread;
         private BufferBlock<int> watchFileQ = new BufferBlock<int>();
+        // 起動直後の投入でプロファイルが未選択にならないよう、初回のファイル走査を待つ。
+        private readonly TaskCompletionSource<bool> firstFileScan = new TaskCompletionSource<bool>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
         private bool serviceListUpdated;
 
         // 設定を保存するスレッド
@@ -3093,6 +3096,7 @@ namespace Amatsukaze.Server
         {
             try
             {
+                await firstFileScan.Task;
                 while (await queueQ.OutputAvailableAsync())
                 {
                     string requestId = null;
@@ -3552,6 +3556,8 @@ namespace Amatsukaze.Server
                         }
                     }
 
+                    firstFileScan.TrySetResult(true);
+
                     if (await Task.WhenAny(completion, Task.Delay(2000)) == completion)
                     {
                         // 終了
@@ -3563,6 +3569,10 @@ namespace Amatsukaze.Server
             {
                 await FatalError(
                     "WatchFileThreadがエラー終了しました", exception);
+            }
+            finally
+            {
+                firstFileScan.TrySetResult(true);
             }
         }
 
