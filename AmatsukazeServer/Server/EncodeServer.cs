@@ -3503,6 +3503,7 @@ namespace Amatsukaze.Server
                                             profile = ReadProfile(filepath);
                                             profile.Name = name;
                                             profile.LastUpdate = lastUpdate;
+                                            profiles[name] = profile;
                                             profilesChanged = true;
                                             await Client.OnProfile(new ProfileUpdate()
                                             {
