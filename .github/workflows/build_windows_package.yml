@@ -277,7 +277,7 @@ jobs:
       - name: Add nicojk_ass
         shell: bash
         env:
-          NICOJK_ASS_VERSION: "0.01"
+          NICOJK_ASS_VERSION: "0.02"
           NICOJK_ASS_REPO: https://github.com/rigaya/nicojk_ass
         run: |
           set -euo pipefail
