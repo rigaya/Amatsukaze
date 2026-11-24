@@ -291,7 +291,7 @@ namespace Amatsukaze.Server
             return waits;
         }
 
-        private bool CheckProfile(QueueItem item, List<Task> waits)
+        private bool CheckProfile(QueueItem item)
         {
             if (item.Profile != server.PendingProfile)
             {
@@ -318,12 +318,6 @@ namespace Amatsukaze.Server
                 item.Priority = itemPriority;
             }
 
-            waits?.Add(ClientQueueUpdate(new QueueUpdate()
-            {
-                Type = UpdateType.Remove,
-                Item = item
-            }));
-
             return true;
         }
 
@@ -336,6 +330,7 @@ namespace Amatsukaze.Server
             if (item.State == QueueState.LogoPending || item.State == QueueState.Queue)
             {
                 var prevState = item.State;
+                var prevProfile = item.Profile;
                 if(item.Mode == ProcMode.DrcsCheck)
                 {
                     // DRCSチェックはプロファイルを必要としないので即開始
@@ -347,7 +342,7 @@ namespace Amatsukaze.Server
                         server.ScheduleQueueItem(item);
                     }
                 }
-                else if (CheckProfile(item, waits))
+                else if (CheckProfile(item))
                 {
                     var map = server.ServiceMap;
                     if (item.ServiceId == -1)
@@ -381,6 +376,11 @@ namespace Amatsukaze.Server
                             server.ScheduleQueueItem(item);
                         }
                     }
+                }
+                // ロゴ待ちが続くときも、決まったプロファイルをキューに通知する。
+                if (prevState == item.State && prevProfile != item.Profile)
+                {
+                    waits?.Add(NotifyQueueItemUpdate(item));
                 }
                 return prevState != item.State;
             }

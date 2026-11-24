@@ -3453,6 +3453,7 @@ namespace Amatsukaze.Server
                                 .ToArray();
 
                             var initialUpdate = (profiles.Count == 0);
+                            var profilesChanged = false;
 
                             foreach (var name in newProfiles.Union(profiles.Keys.ToArray(), StringComparer.OrdinalIgnoreCase))
                             {
@@ -3466,6 +3467,7 @@ namespace Amatsukaze.Server
                                         profile.Name = name;
                                         profile.LastUpdate = File.GetLastWriteTime(filepath);
                                         profiles.Add(profile.Name, profile);
+                                        profilesChanged = true;
                                         await Client.OnProfile(new ProfileUpdate()
                                         {
                                             Type = UpdateType.Add,
@@ -3482,6 +3484,7 @@ namespace Amatsukaze.Server
                                     // 削除された
                                     var profile = profiles[name];
                                     profiles.Remove(name);
+                                    profilesChanged = true;
                                     await Client.OnProfile(new ProfileUpdate()
                                     {
                                         Type = UpdateType.Remove,
@@ -3500,6 +3503,7 @@ namespace Amatsukaze.Server
                                             profile = ReadProfile(filepath);
                                             profile.Name = name;
                                             profile.LastUpdate = lastUpdate;
+                                            profilesChanged = true;
                                             await Client.OnProfile(new ProfileUpdate()
                                             {
                                                 Type = UpdateType.Update,
@@ -3522,6 +3526,7 @@ namespace Amatsukaze.Server
                                 SaveProfile(filepath, profile);
                                 profile.LastUpdate = File.GetLastWriteTime(filepath);
                                 profiles.Add(profile.Name, profile);
+                                profilesChanged = true;
                                 await Client.OnProfile(new ProfileUpdate()
                                 {
                                     Type = UpdateType.Add,
@@ -3533,6 +3538,12 @@ namespace Amatsukaze.Server
                                 // 初回の更新時はプロファイル関連付けを
                                 // 更新するため再度設定を送る
                                 await RequestSetting();
+                            }
+                            if (profilesChanged)
+                            {
+                                var waits = new List<Task>();
+                                UpdateQueueItems(waits);
+                                await Task.WhenAll(waits);
                             }
                         }
                     }
