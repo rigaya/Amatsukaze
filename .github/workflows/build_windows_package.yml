@@ -26,7 +26,7 @@ jobs:
       X262_URL: https://github.com/rigaya/AutoBuildForAviUtlPlugins/releases/download/auto-build-20250907-045307/x262_20260901.zip
       NNEDI3_URL: https://github.com/rigaya/NNEDI3/releases/download/0.00/nnedi3_0.00_x64.zip
       BASE_PKG_URL: https://github.com/rigaya/Amatsukaze/releases/download/1.0.9.0/AmatsukazeBasePkg_20260902.7z
-      HWENC_VPP_PREVIEW_CLI_URL: https://github.com/rigaya/HWEncVppPreview/releases/download/0.01/HWEncVppPreviewCLI_0.01_win-x64.zip
+      HWENC_VPP_PREVIEW_CLI_URL: https://github.com/rigaya/HWEncVppPreview/releases/download/0.02/HWEncVppPreviewCLI_0.02_win-x64.zip
     steps:
       - name: Checkout
         uses: actions/checkout@v7
