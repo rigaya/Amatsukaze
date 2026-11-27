@@ -9,9 +9,9 @@ namespace Amatsukaze.Shared
             ProcMode.Batch,
             ProcMode.Test,
             ProcMode.DrcsCheck,
+            ProcMode.FilterAdjust,
             ProcMode.CMCheck,
-            ProcMode.TrimAdjust,
-            ProcMode.FilterAdjust
+            ProcMode.TrimAdjust
         };
 
         public static bool IsAnalysisOnly(this ProcMode mode) =>

@@ -118,6 +118,12 @@
             </TextBlock>
         </Button>
 
+        <Button Margin="2" Height="Auto" Command="{Binding FilterAdjustCommand, Mode=OneWay}">
+            <TextBlock TextAlignment="Center" TextWrapping="Wrap">
+                <Run FontSize="20" Text="フィルタ調整"/><LineBreak/><Run Text="TS解析後、一時ファイルを残してフィルタ調整画面を開きます。"/>
+            </TextBlock>
+        </Button>
+
         <Button Margin="2" Height="Auto" Command="{Binding CMCheckCommand, Mode=OneWay}">
             <TextBlock TextAlignment="Center" TextWrapping="Wrap">
                 <Run FontSize="20" Text="CM解析のみ"/><LineBreak/><Run Text="CM解析のみ行います。エンコードはしません。プロファイルで一時フォルダを残しておくことで、カット調整機能が使用可能です。"/>
@@ -127,11 +133,6 @@
         <Button Margin="2" Height="Auto" Command="{Binding TrimAdjustCommand, Mode=OneWay}">
             <TextBlock TextAlignment="Center" TextWrapping="Wrap">
                 <Run FontSize="20" Text="カット調整"/><LineBreak/><Run Text="CM解析後、一時ファイルを残してカット調整画面を開きます。"/>
-            </TextBlock>
-        </Button>
-        <Button Margin="2" Height="Auto" Command="{Binding FilterAdjustCommand, Mode=OneWay}">
-            <TextBlock TextAlignment="Center" TextWrapping="Wrap">
-                <Run FontSize="20" Text="フィルタ調整"/><LineBreak/><Run Text="TS解析後、一時ファイルを残してフィルタ調整画面を開きます。"/>
             </TextBlock>
         </Button>
 
