@@ -652,18 +652,9 @@
                     <CheckBox Grid.Row="1" Content="NicoJKログから優先的にコメントを取得する" Margin="0,3"
                                   IsChecked="{Binding Model.SelectedProfile.NicoJKLog, Mode=TwoWay}"
                                   IsEnabled="{Binding IsChecked, ElementName=nicoJKCheck}">
-                        <CheckBox.Style>
-                            <Style TargetType="CheckBox">
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding Model.Setting.IsServerLinux}" Value="True">
-                                        <Setter Property="Visibility" Value="Collapsed"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </CheckBox.Style>
                         <CheckBox.ToolTip>
-                            <TextBlock>NicoJKログからのコメント取得は完全にNicoConvAss依存です。
-                            <LineBreak/>NicoConvAss.iniのNicoJK_pathを設定しておいてください。
+                            <TextBlock>nicojk_assを使う場合は、実行ファイルの隣のnicojk_ass.tomlにログフォルダを設定します。
+                            <LineBreak/>NicoConvAssを使う場合は、NicoConvAss.iniのNicoJK_pathを設定します。
                             </TextBlock>
                         </CheckBox.ToolTip>
                     </CheckBox>

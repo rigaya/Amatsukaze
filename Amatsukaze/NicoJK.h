@@ -17,6 +17,9 @@
 #include "ProcessThread.h"
 
 
+// ネイティブ単体テスト用。ログ優先フラグの有無を1または0で返し、引数の解析などに失敗した場合は-1を返す。
+extern "C" AMATSUKAZE_API int ReadNicoJKScriptLogFlagForTest(int argc, const tchar* argv[]);
+
 class NicoJK : public AMTObject {
     enum ConvMode {
         CONV_ASS_TS,   // そのままtsを投げて変換
@@ -102,6 +105,7 @@ private:
 
     // nicojk_assのmakeを1回呼び出して、取得とASS変換(全解像度)を行う
     bool makeASSByScript(int serviceId, time_t startTime, int duration);
+    friend int ReadNicoJKScriptLogFlagForTest(int argc, const tchar* argv[]);
     tstring MakeNicoJKScriptArgs(const tstring& pythonCommand, int serviceId, time_t startTime, int duration);
     tstring getNicoJKAssScriptPath() const;
 

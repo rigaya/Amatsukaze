@@ -503,17 +503,14 @@ else
                         </label>
                     </td>
                 </tr>
-                @if (_options?.IsServerLinux != true)
-                {
-                    <tr class="profile-check-row">
-                        <td colspan="2">
-                            <label class="settings-check">
-                                <input type="checkbox" checked="@GetBoolValue("NicoJKLog")" @onchange="@(e => OnBoolChanged(e, "NicoJKLog"))" />
-                                NicoJKログから優先的にコメントを取得する
-                            </label>
-                        </td>
-                    </tr>
-                }
+                <tr class="profile-check-row">
+                    <td colspan="2">
+                        <label class="settings-check">
+                            <input type="checkbox" checked="@GetBoolValue("NicoJKLog")" @onchange="@(e => OnBoolChanged(e, "NicoJKLog"))" />
+                            NicoJKログから優先的にコメントを取得する
+                        </label>
+                    </td>
+                </tr>
                 <tr>
                     <th>コメント字幕出力フォーマット</th>
                     <td>

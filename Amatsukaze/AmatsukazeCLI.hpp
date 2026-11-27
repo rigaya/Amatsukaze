@@ -160,8 +160,8 @@ static void printHelp(const tchar* bin) {
         "  --nicojk-offset <秒> 正の値でコメントを遅らせる\n"
         "  --nicojk-program-start <時刻> 録画番組開始時刻\n"
         "  --nicojk-program-title <番組名> 録画番組名(--nicojk-altで時刻から特定できない場合に使う)\n"
-        "  --nicojklog         ニコニコ実況コメントをNicoJKログフォルダから取得\n"
-        "                      (NicoConvASSを -nicojk 1 で呼び出します)\n"
+        "  --nicojklog         ニコニコ実況コメントをNicoJKログフォルダから優先的に取得\n"
+        "                      (nicojk_assには--prefer-nicojk-log、NicoConvASSには-nicojk 1を渡します)\n"
         "  --nicojkmask <数値> ニコニコ実況コメントマスク[1]\n"
         "                      1 : 1280x720不透明\n"
         "                      2 : 1280x720半透明\n"
@@ -1250,6 +1250,23 @@ extern "C" AMATSUKAZE_API int ParseCommandLineForTest(int argc, const tchar* con
 extern "C" AMATSUKAZE_API int ParseCommandLineWithExecutableSearchForTest(int argc, const tchar* const* argv,
     tchar* output, size_t outputCapacity, size_t* outputLength) {
     return parseCommandLineForTest(argc, argv, output, outputCapacity, outputLength, SearchExe);
+}
+
+extern "C" AMATSUKAZE_API int ReadNicoJKScriptLogFlagForTest(int argc, const tchar* argv[]) {
+    try {
+        AMTContext ctx;
+        const auto setting = parseArgs(ctx, argc, argv, [](const tstring& path) { return path; });
+        NicoJK nicojk(ctx, *setting);
+        constexpr int serviceId = 23608;
+        constexpr time_t startTime = 1700000000;
+        constexpr int duration = 60;
+        const auto args = nicojk.MakeNicoJKScriptArgs(_T(""), serviceId, startTime, duration);
+        return (args + _T(" ")).find(_T(" --prefer-nicojk-log ")) != tstring::npos ? 1 : 0;
+    } catch (const Exception&) {
+        return -1;
+    } catch (const std::exception&) {
+        return -1;
+    }
 }
 
 static std::mutex g_log_mutex;

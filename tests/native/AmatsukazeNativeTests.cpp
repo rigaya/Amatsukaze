@@ -1798,6 +1798,17 @@ bool TestCommandLineArguments(tstring& diagnostic) {
     return ExpectCommandLineStatus(with({ _T("--chapter") }), 1, _T("ロゴなしのチャプター生成"), diagnostic);
 }
 
+bool TestNicoJKLogScriptArgument(tstring& diagnostic) {
+    const tchar* args[] = {
+        _T("AmatsukazeCLI"), _T("--mode"), _T("ts_analyze"), _T("-i"), _T("input.ts"), _T("--nicojklog")
+    };
+    const int argc = static_cast<int>(std::size(args));
+    return Expect(ReadNicoJKScriptLogFlagForTest(argc, args) == 1,
+        _T("--nicojklogを指定してもnicojk_assに--prefer-nicojk-logが渡りません"), diagnostic)
+        && Expect(ReadNicoJKScriptLogFlagForTest(argc - 1, args) == 0,
+            _T("--nicojklogを指定せずにnicojk_assへ--prefer-nicojk-logが渡りました"), diagnostic);
+}
+
 bool TestNicoJKSource(tstring& diagnostic) {
     // 既知のUNIX時刻で、ホストのタイムゾーンに依存しないことも調べる。
     for (const TCHAR* value : { _T("1700000000"), _T("20231115071320"), _T("2023-11-15T07:13:20"),
@@ -4498,6 +4509,7 @@ constexpr TestCase TEST_CASES[] = {
     { _T("source_dat_serialization"), TestSourceDatSerialization },
     { _T("command_line_executable_search"), TestCommandLineExecutableSearch },
     { _T("nicojk_source"), TestNicoJKSource },
+    { _T("nicojk_log_script_argument"), TestNicoJKLogScriptArgument },
     { _T("cm_cut_offset"), TestCMCutOffset },
     { _T("cm_cut_offset_command_line"), TestCMCutOffsetCommandLine },
     { _T("wave_header"), TestWaveHeader },

@@ -555,6 +555,15 @@ nicojk_assかNicoConvAssのどちらかを使用します。
    
     これでOKです。
 
+  プロファイルの「NicoJKログから優先的にコメントを取得する」を有効にする場合は、サーバーで使う`nicojk_ass`の実行ファイルまたはスクリプトと同じフォルダに`nicojk_ass.toml`を置きます。`dirs`には`jk1`などのチャンネル別フォルダを含むログのルートを指定します。
+
+  ```toml
+  [nicojk_log]
+  dirs = ['/var/local/nicojk']
+  ```
+
+  取得範囲にログがなければ、過去ログAPIからコメントを取得します。
+
 - Windows環境 (NicoConvAss)
 
   [NicoConvAss](http://vb45wb5b.seesaa.net/)を使って[ニコニコ実況](http://jk.nicovideo.jp/)コメントの過去ログをASS字幕として追加できます。

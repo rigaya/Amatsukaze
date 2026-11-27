@@ -428,7 +428,7 @@ bool NicoJK::makeASS_(int serviceId, time_t startTime, int duration) {
             }
         }
         if (manual || !altMode_.empty()) {
-            if (manual && setting_.isUseNicoJKLog()) ctx.info(_T("取得元の指定をnicojklogより優先します"));
+            if (!source_.file.empty() && setting_.isUseNicoJKLog()) ctx.info(_T("コメントファイルの指定をNicoJKログより優先します"));
             // 基準の録画を使うときだけ、対象の音声を渡す
             const bool useReference = !source_.ref.empty() || !altMode_.empty();
             // デバッグ用: 先行放送の録画があっても、対象の音声を渡さずコメントでの照合だけにする
@@ -497,6 +497,7 @@ tstring NicoJK::MakeNicoJKScriptArgs(const tstring& pythonCommand,
         if (source_.start) args += StringFormat(_T(" --comments-start %.6f"), *source_.start);
         if (source_.offset) args += StringFormat(_T(" --comments-offset %.6f"), *source_.offset);
     }
+    if (setting_.isUseNicoJKLog()) args += _T(" --prefer-nicojk-log");
     args += MakeNicoJKProgramTitleArgument(altMode_, source_.programTitle);
     // 基準
     if (!altMode_.empty()) {
