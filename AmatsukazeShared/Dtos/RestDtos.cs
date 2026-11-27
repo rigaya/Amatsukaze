@@ -573,6 +573,21 @@ namespace Amatsukaze.Shared
         public int End { get; set; } // inclusive
     }
 
+    public sealed class FilterPreviewSource
+    {
+        public int QueueItemId { get; set; }
+        public string FileName { get; set; } = "";
+        public ProcMode Mode { get; set; }
+        public string? ProfileName { get; set; }
+        public string GetModeLabel() => QueueSettingExtensions.GetProcModeDisplay(Mode);
+    }
+
+    public sealed class FilterPreviewSessionRequest
+    {
+        public int QueueItemId { get; set; }
+        public string? ProfileName { get; set; }
+    }
+
     public class TrimAdjustSessionRequest
     {
         public int QueueItemId { get; set; }

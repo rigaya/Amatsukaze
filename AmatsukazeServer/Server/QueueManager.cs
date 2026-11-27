@@ -707,17 +707,21 @@ namespace Amatsukaze.Server
             }
 
             if (req.Mode != ProcMode.AutoBatch)
-            {
-                // 最後に使った設定を記憶しておく
-                server.LastUsedProfile = req.Outputs[0].Profile;
-                server.AddOutPathHistory(req.Outputs[0].DstPath);
-                server.LastAddQueueBat = req.AddQueueBat;
-                waits.Add(server.RequestUIState());
-            }
+                waits.Add(RememberQueueAddition(req));
 
             waits.Add(server.RequestFreeSpace());
 
             await Task.WhenAll(waits);
+        }
+
+        internal Task RememberQueueAddition(AddQueueRequest req)
+        {
+            // フィルタ調整は出力しないが、最後に使ったプロファイルは記憶する。
+            server.LastUsedProfile = req.Outputs[0].Profile;
+            if (req.Mode != ProcMode.FilterAdjust)
+                server.AddOutPathHistory(req.Outputs[0].DstPath);
+            server.LastAddQueueBat = req.AddQueueBat;
+            return server.RequestUIState();
         }
 
         public void CancelAddQueue()

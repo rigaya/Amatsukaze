@@ -144,9 +144,16 @@ namespace Amatsukaze.Server.Rest
             timer = this.timing.Clock.CreateTimer(_ => Cleanup(), null, Ttl, Ttl);
         }
 
-        public async Task<string> CreateAsync(int queueItemId, CancellationToken cancellation)
+        public List<Amatsukaze.Shared.FilterPreviewSource> GetSources() => state.GetFilterPreviewCandidates()
+            .Where(item =>
+            {
+                var temp = item.Log == null ? null : ServerSupport.ExtractTempDirFromLog(item.Log);
+                return !string.IsNullOrEmpty(temp) && File.Exists(Path.Combine(temp, "amts0.dat"));
+            }).Select(item => item.Source).ToList();
+
+        public async Task<string> CreateAsync(int queueItemId, CancellationToken cancellation, ProfileSetting selectedProfile = null)
         {
-            if (!state.TryGetQueueItem(queueItemId, out var item) || item.Profile == null)
+            if (!state.TryGetQueueItem(queueItemId, out var item) || (selectedProfile ?? item.Profile) == null)
                 throw new ArgumentException("キューアイテムまたはプロファイルが見つかりません");
             var log = state.ResolveTaskLogPathById(queueItemId);
             if (string.IsNullOrEmpty(log) || !File.Exists(log)) throw new FileNotFoundException("ログファイルが見つかりません");
@@ -182,7 +189,7 @@ namespace Amatsukaze.Server.Rest
             }
             var id = Guid.NewGuid().ToString("N");
             var workDirectory = Path.Combine(dir, id);
-            var profile = ServerSupport.DeepCopy(item.Profile);
+            var profile = ServerSupport.DeepCopy(selectedProfile ?? item.Profile);
             var engine = createEngine(executable, args);
             try { System.IO.Directory.CreateDirectory(workDirectory); }
             catch { engine.Dispose(); throw; }

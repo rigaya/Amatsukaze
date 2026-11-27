@@ -41,6 +41,8 @@
             </Button>
             <Button DockPanel.Dock="Right" Content="新規" Margin="2" Height="30" ToolTip="現在のプロファイルをコピーして新しいプロファイルを作成します" Command="{Binding NewProfileCommand}"/>
             <Button DockPanel.Dock="Right" Content="適用" Margin="2" Height="30" Width="60" Command="{Binding ApplyProfileCommand}" />
+            <Button DockPanel.Dock="Right" Content="フィルタ調整" Margin="2" Padding="6,0" Height="30"
+                    Click="OpenFilterAdjust" ToolTip="編集中のプロファイルは適用してから開いてください"/>
             <ComboBox ItemsSource="{Binding Model.ProfileListView}" Margin="5" Height="22" SelectedItem="{Binding Model.SelectedProfile, Mode=TwoWay}"/>
         </DockPanel>
 

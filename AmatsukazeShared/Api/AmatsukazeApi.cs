@@ -467,6 +467,10 @@ namespace Amatsukaze.Shared
             }
         }
 
+        // フィルタ調整
+        public Task<ApiResult<List<FilterPreviewSource>>> GetFilterPreviewSourcesAsync()
+            => GetJsonAsync<List<FilterPreviewSource>>("/api/filter-preview/sources");
+
         // Trim調整
         public async Task<ApiResult<TrimAdjustSessionResponse>> CreateTrimSessionAsync(TrimAdjustSessionRequest req)
         {

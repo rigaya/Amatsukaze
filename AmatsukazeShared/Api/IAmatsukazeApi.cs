@@ -100,6 +100,9 @@ namespace Amatsukaze.Shared
 
         Task<ApiResult<PathSuggestResponse>> GetPathSuggestAsync(PathSuggestRequest req);
 
+        // フィルタ調整
+        Task<ApiResult<List<FilterPreviewSource>>> GetFilterPreviewSourcesAsync();
+
         // Trim調整
         Task<ApiResult<TrimAdjustSessionResponse>> CreateTrimSessionAsync(TrimAdjustSessionRequest req);
         Task<ApiResult<byte[]>> GetTrimAudioAsync(string sessionId, int start, int end, System.Threading.CancellationToken cancellationToken = default);

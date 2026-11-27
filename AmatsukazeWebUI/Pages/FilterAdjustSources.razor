@@ -1,0 +1,150 @@
+@page "/filter-adjust"
+@using Amatsukaze.Shared
+@inject IAmatsukazeApi Api
+
+<h1>フィルタ調整の素材を選択</h1>
+<p><a href="@ProfilesUrl">プロファイル画面へ戻る</a></p>
+
+<label for="filter-adjust-profile">プロファイル</label>
+<select id="filter-adjust-profile" class="form-select mb-3" @bind="_profile">
+    <option value="">未選択</option>
+    @foreach (var name in _profiles)
+    {
+        <option value="@name">@name</option>
+    }
+</select>
+
+<h2>既存の素材</h2>
+@if (_loading)
+{
+    <p>読み込み中…</p>
+}
+else if (_sourcesError != null)
+{
+    <p class="text-danger" role="alert">@_sourcesError</p>
+}
+else if (_sources.Count == 0)
+{
+    <p>利用できる素材はありません。</p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr><th scope="col">入力ファイル名</th><th scope="col">モード</th><th scope="col">作成時のプロファイル</th></tr>
+        </thead>
+        <tbody>
+            @foreach (var source in _sources)
+            {
+                <tr>
+                    <td>
+                        @if (string.IsNullOrEmpty(_profile))
+                        {
+                            @source.FileName
+                        }
+                        else
+                        {
+                            <a href="@SourceUrl(source.QueueItemId)">@source.FileName</a>
+                        }
+                    </td>
+                    <td>@source.GetModeLabel()</td>
+                    <td>@source.ProfileName</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+<h2>新しいTSから</h2>
+<div class="mb-2">
+    <PathSuggestInput Value="@_input" ValueChanged="@(path => _input = path)"
+                      Placeholder="入力TSファイルのパス" Extensions=".ts" AllowFiles="true" AllowDirs="false" />
+</div>
+<button class="btn btn-primary" disabled="@(_loading || _adding || string.IsNullOrEmpty(_profile) || string.IsNullOrWhiteSpace(_input))"
+        @onclick="AddAsync">TS解析してフィルタ調整</button>
+@if (_error != null)
+{
+    <p class="text-danger" role="alert">@_error</p>
+}
+@if (_added)
+{
+    <p role="status">キューに追加しました。TS解析が終わると自動で開きます。</p>
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "profile")] public string? ProfileName { get; set; }
+
+    private List<string> _profiles = new();
+    private List<FilterPreviewSource> _sources = new();
+    private string _profile = "";
+    private string _input = "";
+    private string? _sourcesError, _error;
+    private bool _loading = true, _adding, _added;
+
+    private string ProfilesUrl => string.IsNullOrEmpty(_profile) ? "/profiles" : $"/profiles?name={Uri.EscapeDataString(_profile)}";
+    private string SourceUrl(int id) => $"/filter-adjust/{id}?profile={Uri.EscapeDataString(_profile)}";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var profilesTask = Api.GetProfilesAsync();
+        var sourcesTask = Api.GetFilterPreviewSourcesAsync();
+        var profiles = await profilesTask;
+        if (profiles.Ok && profiles.Data != null)
+        {
+            _profiles = profiles.Data.Select(p => p.GetProperty("name").GetString()!).OrderBy(name => name).ToList();
+        }
+        else
+        {
+            _error = profiles.Error ?? "プロファイルを取得できませんでした。";
+        }
+
+        var sources = await sourcesTask;
+        if (sources.Ok && sources.Data != null)
+        {
+            _sources = sources.Data;
+        }
+        else
+        {
+            _sourcesError = sources.Error ?? "素材一覧を取得できませんでした。";
+        }
+        _loading = false;
+    }
+
+    protected override void OnParametersSet()
+    {
+        _profile = _profiles.Contains(ProfileName ?? "") ? ProfileName! : "";
+    }
+
+    private async Task AddAsync()
+    {
+        _error = null;
+        _added = false;
+        var input = _input.Trim();
+        var slash = Math.Max(input.LastIndexOf('/'), input.LastIndexOf('\\'));
+        if (slash < 0 || !input.EndsWith(".ts", StringComparison.OrdinalIgnoreCase))
+        {
+            _error = "入力TSファイルのパスを指定してください。";
+            return;
+        }
+        // ブラウザーとサーバーでOSが異なっても、サーバーのパスをそのまま使う。
+        var length = slash == 0 || (slash == 2 && input[1] == ':') ? slash + 1 : slash;
+        var directory = input[..length];
+        _adding = true;
+        try
+        {
+            var result = await Api.AddQueueAsync(new AddQueueRequest
+            {
+                DirPath = directory,
+                Mode = ProcMode.FilterAdjust,
+                Targets = new() { new AddQueueItem { Path = input } },
+                Outputs = new() { new OutputInfo { DstPath = directory, Profile = _profile, Priority = 3 } },
+            });
+            _added = result.Ok;
+            if (!result.Ok) _error = result.Error ?? "キューに追加できませんでした。";
+        }
+        finally
+        {
+            _adding = false;
+        }
+    }
+}

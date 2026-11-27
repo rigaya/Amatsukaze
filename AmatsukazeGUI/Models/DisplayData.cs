@@ -14,6 +14,7 @@ using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Runtime.Serialization;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
@@ -1577,7 +1578,20 @@ namespace Amatsukaze.Models
 
     public class DisplayProfile : ViewModel
     {
+        private byte[] appliedProfile;
         public ProfileSetting Data { get; private set; }
+
+        private byte[] SerializeProfile()
+        {
+            using var stream = new MemoryStream();
+            new DataContractSerializer(typeof(ProfileSetting)).WriteObject(stream, Data);
+            return stream.ToArray();
+        }
+
+        // 通知を出さない入れ子の設定も含めて、サーバー通知を受けた時点の内容を保存する。
+        internal void RememberAppliedProfile() => appliedProfile = SerializeProfile();
+
+        internal bool HasUnappliedChanges() => appliedProfile == null || !appliedProfile.AsSpan().SequenceEqual(SerializeProfile());
 
         public DisplayFilterSetting Filter { get; private set; }
 

@@ -15,6 +15,9 @@ namespace AmatsukazeWebUI.Pages;
 public partial class FilterAdjust
 {
     [Parameter] public int QueueItemId { get; set; }
+    [SupplyParameterFromQuery(Name = "profile")] public string? ProfileName { get; set; }
+
+    private FilterPreviewSessionRequest SessionRequest() => new() { QueueItemId = QueueItemId, ProfileName = ProfileName };
     private const string QualityKey = "amatsukaze.filterPreview.quality";
     private const string Root = "api/filter-preview/sessions";
     private static readonly string ModuleVersion = GetModuleVersion();
@@ -101,7 +104,7 @@ public partial class FilterAdjust
             catch (JSException) { }
             // 作成結果を回収してから破棄するため、画面終了では作成要求を中断しない。
             using var createCancellation = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-            using var create = await Http.PostAsJsonAsync(Root, new { queueItemId = QueueItemId }, createCancellation.Token);
+            using var create = await Http.PostAsJsonAsync(Root, SessionRequest(), createCancellation.Token);
             var session = await ReadJsonAsync(create, createCancellation.Token);
             _sessionId = Node(session, "sessionId")?.ToString() ?? throw new InvalidOperationException("セッションIDがありません");
             if (_disposed) return;
@@ -664,7 +667,7 @@ public partial class FilterAdjust
                 _sessionId = null;
             }
             using var creationCancellation = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-            using var creation = await Http.PostAsJsonAsync(Root, new { queueItemId = QueueItemId }, creationCancellation.Token);
+            using var creation = await Http.PostAsJsonAsync(Root, SessionRequest(), creationCancellation.Token);
             var session = await ReadJsonAsync(creation, creationCancellation.Token);
             _sessionId = Node(session, "sessionId")?.ToString() ?? throw new InvalidOperationException("セッションIDがありません");
             if (_disposed) return;

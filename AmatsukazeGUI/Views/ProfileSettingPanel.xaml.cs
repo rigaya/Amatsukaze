@@ -25,6 +25,21 @@ namespace Amatsukaze.Views
             InitializeComponent();
         }
 
+        private void OpenFilterAdjust(object sender, RoutedEventArgs e)
+        {
+            if (DataContext is not ViewModels.ProfileSettingViewModel vm || vm.Model.SelectedProfile == null)
+                return;
+
+            var owner = Window.GetWindow(this);
+            if (vm.Model.SelectedProfile.HasUnappliedChanges())
+            {
+                MessageBox.Show(owner, "未適用の変更があります。適用してからフィルタ調整を開いてください。",
+                    "フィルタ調整", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+            new FilterAdjustSourcesWindow(vm.Model) { Owner = owner }.ShowDialog();
+        }
+
         private void TextBox_PreviewDragOver(object sender, DragEventArgs e)
         {
             if (e.Data.GetDataPresent(DataFormats.FileDrop))

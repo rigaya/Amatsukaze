@@ -3,6 +3,7 @@
 @using System.Text.Json.Nodes
 @using Amatsukaze.Shared
 @inject IAmatsukazeApi Api
+@inject NavigationManager Nav
 
 @if (!string.IsNullOrEmpty(_error))
 {
@@ -18,6 +19,8 @@
         }
     </select>
     <button class="btn btn-primary" @onclick="ApplyAsync" disabled="@(!_isDirty || _loading || _draftJson == null)">適用</button>
+    <button class="btn btn-secondary" @onclick="OpenFilterAdjust" disabled="@(_isDirty || _loading || _draftJson == null)"
+            title="@(_isDirty ? "適用してから開いてください" : null)">フィルタ調整</button>
     <button class="btn btn-secondary" @onclick="OpenNewDialog" disabled="@(_loading || _profiles.Count == 0)">新規</button>
     <button class="btn btn-secondary" @onclick="OpenRenameDialog" disabled="@(_loading || _profiles.Count == 0)">リネーム</button>
     <button class="btn btn-danger" @onclick="DeleteAsync" disabled="@(_loading || _profiles.Count == 0)">削除</button>
@@ -755,7 +758,25 @@ else
     private static readonly string[] _whisperModelEnumNames = new[] { "Auto", "Unspecified", "Small", "Medium", "LargeV1", "LargeV2", "LargeV3", "LargeV3Turbo" };
     private static readonly string[] _resourcePhaseNames = new[] { "TS解析", "CM解析", "フィルタ映像解析", "エンコード", "Mux" };
 
-    protected override Task OnInitializedAsync() => ReloadProfilesAsync();
+    [SupplyParameterFromQuery(Name = "name")] public string? ProfileName { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _selectedProfileName = ProfileName;
+        await ReloadProfilesAsync();
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (!_isDirty && !_loading && ProfileName != _selectedProfileName && _profiles.Any(p => p.Name == ProfileName))
+        {
+            _selectedProfileName = ProfileName;
+            LoadDraftFromSelected();
+        }
+    }
+
+    private void OpenFilterAdjust() =>
+        Nav.NavigateTo($"/filter-adjust?profile={Uri.EscapeDataString(_selectedProfileName!)}");
 
     private async Task ReloadProfilesAsync()
     {

@@ -28,6 +28,29 @@ public sealed class FilterAdjustQueueTests
         Assert.Empty(item.FailReason);
     }
 
+    [Theory]
+    [InlineData(ProcMode.FilterAdjust, false)]
+    [InlineData(ProcMode.Batch, true)]
+    public async Task フィルタ調整の追加時は前回のプロファイルだけを記憶し出力履歴を保つ(ProcMode mode, bool remember)
+    {
+        var fixture = new RestQueueTestFixture();
+        var existing = new UIState { LastOutputPath = "前回の出力先", OutputPathHistory = new() { "前回の出力先" } };
+        RestQueueTestFixture.SetField(fixture.Server, "UIState_", existing);
+        var history = new OrderedSet<string>();
+        history.Add(existing.LastOutputPath);
+        RestQueueTestFixture.SetField(fixture.Server, "OutPathHistory", history);
+
+        await fixture.Manager.RememberQueueAddition(new AddQueueRequest
+        {
+            Mode = mode,
+            Outputs = new() { new OutputInfo { DstPath = "今回の入力フォルダ", Profile = "選択したプロファイル" } },
+        });
+
+        Assert.Equal("選択したプロファイル", existing.LastUsedProfile);
+        Assert.Equal(remember ? "今回の入力フォルダ" : "前回の出力先", existing.LastOutputPath);
+        Assert.Equal(remember, existing.OutputPathHistory.Contains("今回の入力フォルダ"));
+    }
+
     [Fact]
     public async Task フィルタ調整の一時ファイルからは通常処理として再投入する()
     {

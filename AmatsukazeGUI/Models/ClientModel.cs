@@ -2212,6 +2212,7 @@ namespace Amatsukaze.Models
 
                 profile.PreEncodeBatchFile = data.Profile.PreEncodeBatchFile;
                 profile.IsModified = false;
+                profile.RememberAppliedProfile();
             }
             else
             {

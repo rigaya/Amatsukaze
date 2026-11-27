@@ -227,11 +227,106 @@ public class FilterPreviewEndpointTests
         return profile;
     }
 
+    [Fact]
+    public async Task 素材一覧は一時データが残る完了済みの候補を新しい順に返す()
+    {
+        await using var fixture = new RestFileSystemFixture();
+        var start = new DateTime(2026, 1, 2, 3, 4, 5);
+        var items = new List<QueueItem>();
+        foreach (var (id, mode, state, hasDat) in new[]
+        {
+            (1, ProcMode.Batch, QueueState.Complete, true),
+            (2, ProcMode.FilterAdjust, QueueState.Complete, true),
+            (3, ProcMode.CMCheck, QueueState.Complete, false),
+            (4, ProcMode.FilterAdjust, QueueState.Encoding, true),
+            (5, ProcMode.Test, QueueState.Complete, true),
+            (6, ProcMode.FilterAdjust, QueueState.Complete, false),
+            (7, ProcMode.Batch, QueueState.Complete, true),
+        })
+        {
+            var item = RestQueueTestFixture.Item(id, state);
+            item.Mode = mode;
+            item.EncodeStart = start.AddSeconds(id);
+            item.EncodeTime = TimeSpan.FromSeconds(10);
+            item.SrcPath = Path.Combine(fixture.Root, $"素材{id}.ts");
+            item.Profile = MakeProfile($"作成時{id}");
+            // 通常のエンコードは一時フォルダを残す設定のものだけが候補になる。7は設定がないので除く。
+            item.Profile.NoRemoveTmp = id == 1;
+            if (id != 6)
+            {
+                var temp = Path.Combine(fixture.Root, "work", $"amt-{id}");
+                Directory.CreateDirectory(temp);
+                if (hasDat) File.WriteAllBytes(Path.Combine(temp, "amts0.dat"), [0]);
+                var server = fixture.Api.Queue.Server;
+                var log = (item.IsCheck ? server.GetCheckLogFileBase(item.EncodeStart) : server.GetLogFileBase(item.EncodeStart)) + ".txt";
+                Directory.CreateDirectory(Path.GetDirectoryName(log)!);
+                File.WriteAllText(log, "一時フォルダ: " + temp, Util.AmatsukazeDefaultEncoding);
+            }
+            items.Add(item);
+        }
+        await fixture.Api.Queue.Seed(items.ToArray());
+
+        var result = await fixture.Api.Send("GET", "/api/filter-preview/sources");
+        Assert.Equal(200, result.Status);
+        using var json = JsonDocument.Parse(result.Body);
+        var rows = json.RootElement.EnumerateArray().ToArray();
+        Assert.Equal(new[] { 2, 1 }, rows.Select(row => row.GetProperty("queueItemId").GetInt32()));
+        Assert.Equal("素材2.ts", rows[0].GetProperty("fileName").GetString());
+        Assert.Equal("FilterAdjust", rows[0].GetProperty("mode").GetString());
+        Assert.Equal("作成時2", rows[0].GetProperty("profileName").GetString());
+    }
+
+    [Fact]
+    public async Task 指定された別のプロファイルを初期値と上書き先とコピー元に使う()
+    {
+        using var peer = new FilterPreviewViewTests.Peer();
+        await using var fixture = CreateFixture(peer);
+        var original = MakeProfile("録画時");
+        var selected = MakeProfile("選択中");
+        selected.X264Option = "コピー元の設定";
+        selected.FilterOption = FilterOption.Custom;
+        selected.FilterPath = "選択中のフィルタ.avs";
+        fixture.Profiles.Add(original.Name, original);
+        fixture.Profiles.Add(selected.Name, selected);
+        var sessionId = await CreateSessionAsync(fixture, peer, original, selected.Name);
+        var route = new { sessionId };
+        var config = await fixture.Api.Send("GET", Session + "/config", routeValues: route);
+        Assert.Equal(200, config.Status);
+        using var json = JsonDocument.Parse(config.Body);
+        Assert.Equal(selected.Name, json.RootElement.GetProperty("name").GetString());
+        Assert.Equal("Custom", json.RootElement.GetProperty("filterOption").GetString());
+
+        await ConfigureAsync(fixture, peer, sessionId, 1, "None");
+        var copy = await fixture.Api.Send("POST", Session + "/save",
+            body: """{"saveAs":true,"name":"別名","preserveCustomFilter":true}""", routeValues: route);
+        Assert.Equal(200, copy.Status);
+        Assert.Equal(selected.X264Option, fixture.Profiles["別名"].X264Option);
+        Assert.Equal(selected.FilterPath, fixture.Profiles["別名"].FilterPath);
+        Assert.Equal(FilterOption.Custom, fixture.Profiles["別名"].FilterOption);
+
+        await ConfigureAsync(fixture, peer, sessionId, 2, "QSVEncFilter");
+        var overwrite = await fixture.Api.Send("POST", Session + "/save",
+            body: """{"saveAs":false}""", routeValues: route);
+        Assert.Equal(200, overwrite.Status);
+        Assert.Equal(FilterOption.QSVEncFilter, fixture.Profiles[selected.Name].FilterOption);
+        Assert.Equal(FilterOption.None, fixture.Profiles[original.Name].FilterOption);
+    }
+
+    [Fact]
+    public async Task 存在しないプロファイル名でセッションを開くと400になる()
+    {
+        await using var fixture = new RestFileSystemFixture();
+        var result = await fixture.Api.Send("POST", Root, body: """{"queueItemId":123,"profileName":"存在しない"}""");
+        Assert.Equal(400, result.Status);
+        using var json = JsonDocument.Parse(result.Body);
+        Assert.Contains("指定されたプロファイル", json.RootElement.GetProperty("message").GetString());
+    }
+
     private static RestFileSystemFixture CreateFixture(FilterPreviewViewTests.Peer peer) =>
         new(state => new FilterPreviewService(state, _ => new FilterPreviewSourceFormat(),
             createEngine: (_, _) => peer.Engine));
 
-    private static async Task<string> CreateSessionAsync(RestFileSystemFixture fixture, FilterPreviewViewTests.Peer peer, ProfileSetting profile)
+    private static async Task<string> CreateSessionAsync(RestFileSystemFixture fixture, FilterPreviewViewTests.Peer peer, ProfileSetting profile, string? profileName = null)
     {
         var temp = Path.Combine(fixture.Root, "work", "temp");
         Directory.CreateDirectory(temp);
@@ -247,7 +342,8 @@ public class FilterPreviewEndpointTests
         await fixture.Api.Queue.Seed(item);
         await peer.SendTextAsync("AMTPREVIEW READY version=2\n");
 
-        var response = await fixture.Api.Send("POST", Root, body: """{"queueItemId":123}""");
+        var body = profileName == null ? """{"queueItemId":123}""" : JsonSerializer.Serialize(new { queueItemId = 123, profileName });
+        var response = await fixture.Api.Send("POST", Root, body: body);
         Assert.Equal(200, response.Status);
         using var json = JsonDocument.Parse(response.Body);
         return json.RootElement.GetProperty("sessionId").GetString()!;

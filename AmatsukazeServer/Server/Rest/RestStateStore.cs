@@ -1011,8 +1011,29 @@ namespace Amatsukaze.Server.Rest
                 }).ToList(),
                 GenreNames = item.Genre?.Select(g => SubGenre.GetDisplayGenre(g)?.FullName ?? SubGenre.GetUnknownFullName(g)).ToList(),
                 CanTrimAdjust = item.State == QueueState.Complete && (item.IsBatch || item.Mode.HasCmAnalysis()),
-                CanFilterAdjust = item.State == QueueState.Complete && (item.IsBatch || item.Mode.IsAnalysisOnly())
+                CanFilterAdjust = CanFilterAdjust(item)
             };
+        }
+
+        private static bool CanFilterAdjust(QueueItem item) =>
+            item.State == QueueState.Complete && (item.IsBatch || item.Mode.IsAnalysisOnly());
+
+        internal List<(Amatsukaze.Shared.FilterPreviewSource Source, string Log)> GetFilterPreviewCandidates()
+        {
+            lock (sync)
+            {
+                // 通常のエンコードは一時フォルダを残す設定のときだけ候補にし、消えたもののログを読まない。
+                return queueItems.Where(item => item != null && !string.IsNullOrEmpty(item.SrcPath) && CanFilterAdjust(item)
+                        && (item.Mode.IsAnalysisOnly() || item.Profile?.NoRemoveTmp == true))
+                    .OrderByDescending(item => item.EncodeFinish).ThenByDescending(item => item.Id)
+                    .Select(item => (new Amatsukaze.Shared.FilterPreviewSource
+                    {
+                        QueueItemId = item.Id,
+                        FileName = item.FileName,
+                        Mode = (Amatsukaze.Shared.ProcMode)item.Mode,
+                        ProfileName = item.Profile?.Name ?? item.ProfileName,
+                    }, ResolveTaskLogPath(item))).ToList();
+            }
         }
 
         private static string GetStateLabel(QueueItem item)

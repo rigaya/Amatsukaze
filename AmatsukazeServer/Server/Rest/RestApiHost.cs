@@ -1944,13 +1944,21 @@ namespace Amatsukaze.Server.Rest
                 return Results.NotFound();
             });
 
+            app.MapGet("/api/filter-preview/sources", () => Results.Json(filterPreview.GetSources()));
+
             app.MapPost("/api/filter-preview/sessions", async (HttpContext context) =>
             {
-                var data = await context.Request.ReadFromJsonAsync<TrimAdjustSessionRequest>();
+                var data = await context.Request.ReadFromJsonAsync<FilterPreviewSessionRequest>();
                 if (data == null) return Results.BadRequest();
                 try
                 {
-                    var sessionId = await filterPreview.CreateAsync(data.QueueItemId, context.RequestAborted);
+                    ProfileSetting profile = null;
+                    if (!string.IsNullOrEmpty(data.ProfileName))
+                    {
+                        profile = server.GetProfile(data.ProfileName);
+                        if (profile == null) return Results.BadRequest(new { message = "指定されたプロファイルが見つかりません" });
+                    }
+                    var sessionId = await filterPreview.CreateAsync(data.QueueItemId, context.RequestAborted, profile);
                     return Results.Json(new { sessionId, sourceName = filterPreview.GetSourceName(sessionId) });
                 }
                 catch (Exception ex) when (ex is ArgumentException || ex is IOException || ex is InvalidOperationException || ex is TimeoutException || ex is System.ComponentModel.Win32Exception) { return Results.BadRequest(new { message = ex.Message }); }
