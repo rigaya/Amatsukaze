@@ -174,7 +174,7 @@ jobs:
           tar -xf "$basepkg_archive" -C pkg
           # nicojk_ass(別リポジトリ)のリリースから、単一のexeだけを取り込む。
           # 版はここで決める。展開したexeの--versionが版と一致することを確かめる。
-          NICOJK_ASS_VERSION=0.02
+          NICOJK_ASS_VERSION=0.03
           NICOJK_ASS_REPO=https://github.com/rigaya/nicojk_ass
           curl -fL --retry 3 --retry-delay 10 -o nicojk_ass.zip \
             "${NICOJK_ASS_REPO}/releases/download/${NICOJK_ASS_VERSION}/nicojk_ass-${NICOJK_ASS_VERSION}-linux-x64.zip"

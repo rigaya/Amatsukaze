@@ -100,7 +100,7 @@ jobs:
           curl.exe -fL --retry 3 --retry-delay 10 -o deps\\x262.zip "%X262_URL%"
           curl.exe -fL --retry 3 --retry-delay 10 -o deps\\nnedi3.zip "%NNEDI3_URL%"
           curl.exe -fL --retry 3 --retry-delay 10 -o deps\\hwenc_vpp_preview_cli.zip "%HWENC_VPP_PREVIEW_CLI_URL%"
-          git clone --depth 1 --branch 0.05 --single-branch https://github.com/rigaya/SCRenamePy.git deps\\screname
+          git clone --depth 1 --branch 0.06 --single-branch https://github.com/rigaya/SCRenamePy.git deps\\screname
           echo --- deps contents (after Download) ---
           tree /f deps
 
@@ -222,7 +222,7 @@ jobs:
           if exist defaults\\exe_files\\ch_sid.txt copy /y defaults\\exe_files\\ch_sid.txt package\\exe_files
           if exist defaults\\exe_files\\plugins64\\*.avsi copy /y defaults\\exe_files\\plugins64\\*.avsi package\\exe_files\\plugins64
 
-          rem SCRenamePy 0.05タグの全ファイル（.gitを除外）
+          rem SCRenamePy 0.06タグの全ファイル（.gitを除外）
           if not exist deps\\screname\\SCRename.py (
             echo SCRenamePyのクローン先が見つかりません。
             exit /b 1
@@ -286,7 +286,7 @@ jobs:
       - name: Add nicojk_ass
         shell: bash
         env:
-          NICOJK_ASS_VERSION: "0.02"
+          NICOJK_ASS_VERSION: "0.03"
           NICOJK_ASS_REPO: https://github.com/rigaya/nicojk_ass
         run: |
           set -euo pipefail

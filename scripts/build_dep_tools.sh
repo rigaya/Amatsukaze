@@ -376,11 +376,11 @@ assert_static() {
 
 build_screname() {
     local archive temp
-    archive=$(fetch SCRenamePy-0.05.tar.gz 'https://github.com/rigaya/SCRenamePy/archive/refs/tags/0.05.tar.gz')
+    archive=$(fetch SCRenamePy-0.06.tar.gz 'https://github.com/rigaya/SCRenamePy/archive/refs/tags/0.06.tar.gz')
     temp=$(mktemp -d "$work_dir/screname.XXXXXXXX")
     tar -xf "$archive" -C "$temp"
     mkdir -p "$stage/exe_files/SCRenamePy"
-    cp "$temp/SCRenamePy-0.05/"SCRename.* "$stage/exe_files/SCRenamePy/"
+    cp "$temp/SCRenamePy-0.06/"SCRename.* "$stage/exe_files/SCRenamePy/"
     chmod +x "$stage/exe_files/SCRenamePy/SCRename.py"
     rm -r "$temp"
 }
