@@ -79,28 +79,28 @@ jobs:
           if not exist vcpkg (
             git clone https://github.com/microsoft/vcpkg vcpkg
           )
-          call vcpkg\\bootstrap-vcpkg.bat
-          set VCPKG_ROOT=%CD%\\vcpkg
-          vcpkg\\vcpkg install zlib:x64-windows-static libjpeg-turbo[turbojpeg]:x64-windows-static
-          echo VCPKG_ROOT=%CD%\\vcpkg>> %GITHUB_ENV%
+          call vcpkg\bootstrap-vcpkg.bat
+          set VCPKG_ROOT=%CD%\vcpkg
+          vcpkg\vcpkg install zlib:x64-windows-static libjpeg-turbo[turbojpeg]:x64-windows-static
+          echo VCPKG_ROOT=%CD%\vcpkg>> %GITHUB_ENV%
 
       - name: Download dependencies
         shell: cmd
         run: |
           cd /d %GITHUB_WORKSPACE%
           if not exist deps mkdir deps
-          curl.exe -fL --retry 3 --retry-delay 10 -o deps\\ffmpeg.7z "%FFMPEG_URL%"
-          curl.exe -fL --retry 3 --retry-delay 10 -o deps\\deplib.7z "%DEPLIB_URL%"
-          curl.exe -fL --retry 3 --retry-delay 10 -o deps\\join_logo.zip "%JOINLOGO_URL%"
-          curl.exe -fL --retry 3 --retry-delay 10 -o deps\\avscuda.zip "%AVSCUDA_URL%"
-          curl.exe -fL --retry 3 --retry-delay 10 -o deps\\lsmash.7z "%LSMASH_URL%"
-          curl.exe -fL --retry 3 --retry-delay 10 -o deps\\x264.zip "%X264_URL%"
-          curl.exe -fL --retry 3 --retry-delay 10 -o deps\\x265.zip "%X265_URL%"
-          curl.exe -fL --retry 3 --retry-delay 10 -o deps\\svt.zip "%SVT_URL%"
-          curl.exe -fL --retry 3 --retry-delay 10 -o deps\\x262.zip "%X262_URL%"
-          curl.exe -fL --retry 3 --retry-delay 10 -o deps\\nnedi3.zip "%NNEDI3_URL%"
-          curl.exe -fL --retry 3 --retry-delay 10 -o deps\\hwenc_vpp_preview_cli.zip "%HWENC_VPP_PREVIEW_CLI_URL%"
-          git clone --depth 1 --branch 0.06 --single-branch https://github.com/rigaya/SCRenamePy.git deps\\screname
+          curl.exe -fL --retry 3 --retry-delay 10 -o deps\ffmpeg.7z "%FFMPEG_URL%"
+          curl.exe -fL --retry 3 --retry-delay 10 -o deps\deplib.7z "%DEPLIB_URL%"
+          curl.exe -fL --retry 3 --retry-delay 10 -o deps\join_logo.zip "%JOINLOGO_URL%"
+          curl.exe -fL --retry 3 --retry-delay 10 -o deps\avscuda.zip "%AVSCUDA_URL%"
+          curl.exe -fL --retry 3 --retry-delay 10 -o deps\lsmash.7z "%LSMASH_URL%"
+          curl.exe -fL --retry 3 --retry-delay 10 -o deps\x264.zip "%X264_URL%"
+          curl.exe -fL --retry 3 --retry-delay 10 -o deps\x265.zip "%X265_URL%"
+          curl.exe -fL --retry 3 --retry-delay 10 -o deps\svt.zip "%SVT_URL%"
+          curl.exe -fL --retry 3 --retry-delay 10 -o deps\x262.zip "%X262_URL%"
+          curl.exe -fL --retry 3 --retry-delay 10 -o deps\nnedi3.zip "%NNEDI3_URL%"
+          curl.exe -fL --retry 3 --retry-delay 10 -o deps\hwenc_vpp_preview_cli.zip "%HWENC_VPP_PREVIEW_CLI_URL%"
+          git clone --depth 1 --branch 0.06 --single-branch https://github.com/rigaya/SCRenamePy.git deps\screname
           echo --- deps contents (after Download) ---
           tree /f deps
 
@@ -113,8 +113,8 @@ jobs:
           if not exist ffmpeg_lgpl mkdir ffmpeg_lgpl
           7z x -y -o"%OUT%\ffmpeg_lgpl" "%DEPS%\ffmpeg.7z"
           rem Flatten if 7z has root folder (e.g. ffmpeg_dlls_for_hwenc_20250830) -> expect ffmpeg_lgpl/include, ffmpeg_lgpl/lib
-          if not exist ffmpeg_lgpl\\include (
-            for /d %%d in (ffmpeg_lgpl\\*) do (
+          if not exist ffmpeg_lgpl\include (
+            for /d %%d in (ffmpeg_lgpl\*) do (
               robocopy "%%d" "ffmpeg_lgpl" /E /NFL /NDL /NJH /NJS
               rmdir /s /q "%%d"
               goto :ffmpeg_flatten_done
@@ -125,21 +125,21 @@ jobs:
           tree ffmpeg_lgpl
           if not exist lib mkdir lib
           7z x -y -o"%OUT%\lib" "%DEPS%\deplib.7z"
-          if not exist deps\\join_logo mkdir deps\\join_logo
+          if not exist deps\join_logo mkdir deps\join_logo
           7z x -y -o"%DEPS%\join_logo" "%DEPS%\join_logo.zip"
-          if not exist deps\\avscuda mkdir deps\\avscuda
+          if not exist deps\avscuda mkdir deps\avscuda
           7z x -y -o"%DEPS%\avscuda" "%DEPS%\avscuda.zip"
-          if not exist deps\\lsmash mkdir deps\\lsmash
+          if not exist deps\lsmash mkdir deps\lsmash
           7z x -y -o"%DEPS%\lsmash" "%DEPS%\lsmash.7z"
-          if not exist deps\\x264 mkdir deps\\x264
+          if not exist deps\x264 mkdir deps\x264
           7z x -y -o"%DEPS%\x264" "%DEPS%\x264.zip"
-          if not exist deps\\x265 mkdir deps\\x265
+          if not exist deps\x265 mkdir deps\x265
           7z x -y -o"%DEPS%\x265" "%DEPS%\x265.zip"
-          if not exist deps\\svt mkdir deps\\svt
+          if not exist deps\svt mkdir deps\svt
           7z x -y -o"%DEPS%\svt" "%DEPS%\svt.zip"
-          if not exist deps\\x262 mkdir deps\\x262
+          if not exist deps\x262 mkdir deps\x262
           7z x -y -o"%DEPS%\x262" "%DEPS%\x262.zip"
-          if not exist deps\\nnedi3 mkdir deps\\nnedi3
+          if not exist deps\nnedi3 mkdir deps\nnedi3
           7z x -y -o"%DEPS%\nnedi3" "%DEPS%\nnedi3.zip"
           echo --- deps contents (after Extract) ---
           tree /f deps
@@ -176,108 +176,108 @@ jobs:
           )
           if exist package rmdir /s /q package
           mkdir package
-          curl.exe -fL --retry 3 --retry-delay 10 -o deps\\base_pkg.7z "%BASE_PKG_URL%"
+          curl.exe -fL --retry 3 --retry-delay 10 -o deps\base_pkg.7z "%BASE_PKG_URL%"
           7z x -y -o"%GITHUB_WORKSPACE%\package" "%DEPS%\base_pkg.7z"
           rem 旧base packageに含まれる廃止済みツールを除去する
-          if exist package\\exe_files\\BatchHashChecker.exe del /f /q package\\exe_files\\BatchHashChecker.exe
+          if exist package\exe_files\BatchHashChecker.exe del /f /q package\exe_files\BatchHashChecker.exe
 
       - name: Assemble package
         shell: cmd
         run: |
           cd /d %GITHUB_WORKSPACE%
-          if not exist package\\exe_files mkdir package\\exe_files
-          if not exist package\\exe_files\\cmd mkdir package\\exe_files\\cmd
-          if not exist package\\exe_files\\plugins64 mkdir package\\exe_files\\plugins64
+          if not exist package\exe_files mkdir package\exe_files
+          if not exist package\exe_files\cmd mkdir package\exe_files\cmd
+          if not exist package\exe_files\plugins64 mkdir package\exe_files\plugins64
 
           rem build outputs
-          if exist x64\\Release2\\*.dll copy /y x64\\Release2\\*.dll package\\exe_files
-          if exist x64\\Release\\*.dll copy /y x64\\Release\\*.dll package\\exe_files
-          if exist x64\\Release\\*.exe copy /y x64\\Release\\*.exe package\\exe_files
+          if exist x64\Release2\*.dll copy /y x64\Release2\*.dll package\exe_files
+          if exist x64\Release\*.dll copy /y x64\Release\*.dll package\exe_files
+          if exist x64\Release\*.exe copy /y x64\Release\*.exe package\exe_files
           rem 単体テスト用の実行ファイルは配布物から除外する
-          if exist package\\exe_files\\AmatsukazeNativeTests.exe del /f /q package\\exe_files\\AmatsukazeNativeTests.exe
+          if exist package\exe_files\AmatsukazeNativeTests.exe del /f /q package\exe_files\AmatsukazeNativeTests.exe
 
-          if exist publish\\win-x64\\*.exe copy /y publish\\win-x64\\*.exe package\\exe_files
-          if exist publish\\win-x64\\*.dll copy /y publish\\win-x64\\*.dll package\\exe_files
-          if exist publish\\win-x64\\*.dll.config copy /y publish\\win-x64\\*.dll.config package\\exe_files
-          if exist publish\\win-x64\\*.xml copy /y publish\\win-x64\\*.xml package\\exe_files
+          if exist publish\win-x64\*.exe copy /y publish\win-x64\*.exe package\exe_files
+          if exist publish\win-x64\*.dll copy /y publish\win-x64\*.dll package\exe_files
+          if exist publish\win-x64\*.dll.config copy /y publish\win-x64\*.dll.config package\exe_files
+          if exist publish\win-x64\*.xml copy /y publish\win-x64\*.xml package\exe_files
 
-          if exist package\\exe_files\\wwwroot rmdir /s /q package\\exe_files\\wwwroot
-          if exist publish\\win-x64\\wwwroot robocopy publish\\win-x64\\wwwroot package\\exe_files\\wwwroot /E /NFL /NDL /NJH /NJS
+          if exist package\exe_files\wwwroot rmdir /s /q package\exe_files\wwwroot
+          if exist publish\win-x64\wwwroot robocopy publish\win-x64\wwwroot package\exe_files\wwwroot /E /NFL /NDL /NJH /NJS
 
           rem ScriptCommandWrapper -> cmd
-          if exist x64\\Release\\ScriptCommandWrapper.exe (
-            copy /y x64\\Release\\ScriptCommandWrapper.exe package\\exe_files\\cmd\\AddTag.exe
-            copy /y x64\\Release\\ScriptCommandWrapper.exe package\\exe_files\\cmd\\CancelItem.exe
-            copy /y x64\\Release\\ScriptCommandWrapper.exe package\\exe_files\\cmd\\GetOutFiles.exe
-            copy /y x64\\Release\\ScriptCommandWrapper.exe package\\exe_files\\cmd\\SetOutDir.exe
-            copy /y x64\\Release\\ScriptCommandWrapper.exe package\\exe_files\\cmd\\SetPriority.exe
+          if exist x64\Release\ScriptCommandWrapper.exe (
+            copy /y x64\Release\ScriptCommandWrapper.exe package\exe_files\cmd\AddTag.exe
+            copy /y x64\Release\ScriptCommandWrapper.exe package\exe_files\cmd\CancelItem.exe
+            copy /y x64\Release\ScriptCommandWrapper.exe package\exe_files\cmd\GetOutFiles.exe
+            copy /y x64\Release\ScriptCommandWrapper.exe package\exe_files\cmd\SetOutDir.exe
+            copy /y x64\Release\ScriptCommandWrapper.exe package\exe_files\cmd\SetPriority.exe
           )
-          if exist package\\exe_files\\ScriptCommandWrapper.exe del /q package\\exe_files\\ScriptCommandWrapper.exe
+          if exist package\exe_files\ScriptCommandWrapper.exe del /q package\exe_files\ScriptCommandWrapper.exe
 
           rem defaults
-          if exist defaults\\avs robocopy defaults\\avs package\\avs /E /NFL /NDL /NJH /NJS
-          if exist defaults\\bat_win robocopy defaults\\bat_win package\\bat /E /NFL /NDL /NJH /NJS
-          if exist defaults\\profile robocopy defaults\\profile package\\profile /E /NFL /NDL /NJH /NJS
-          if exist defaults\\drcs\\drcs_map.txt copy /y defaults\\drcs\\drcs_map.txt package\\exe_files
-          if exist defaults\\exe_files\\ch_sid.txt copy /y defaults\\exe_files\\ch_sid.txt package\\exe_files
-          if exist defaults\\exe_files\\plugins64\\*.avsi copy /y defaults\\exe_files\\plugins64\\*.avsi package\\exe_files\\plugins64
+          if exist defaults\avs robocopy defaults\avs package\avs /E /NFL /NDL /NJH /NJS
+          if exist defaults\bat_win robocopy defaults\bat_win package\bat /E /NFL /NDL /NJH /NJS
+          if exist defaults\profile robocopy defaults\profile package\profile /E /NFL /NDL /NJH /NJS
+          if exist defaults\drcs\drcs_map.txt copy /y defaults\drcs\drcs_map.txt package\exe_files
+          if exist defaults\exe_files\ch_sid.txt copy /y defaults\exe_files\ch_sid.txt package\exe_files
+          if exist defaults\exe_files\plugins64\*.avsi copy /y defaults\exe_files\plugins64\*.avsi package\exe_files\plugins64
 
           rem SCRenamePy 0.06タグの全ファイル（.gitを除外）
-          if not exist deps\\screname\\SCRename.py (
+          if not exist deps\screname\SCRename.py (
             echo SCRenamePyのクローン先が見つかりません。
             exit /b 1
           )
-          if not exist package\\exe_files\\SCRenamePy mkdir package\\exe_files\\SCRenamePy
-          robocopy deps\\screname package\\exe_files\\SCRenamePy /E /XD .git /NFL /NDL /NJH /NJS
+          if not exist package\exe_files\SCRenamePy mkdir package\exe_files\SCRenamePy
+          robocopy deps\screname package\exe_files\SCRenamePy /E /XD .git /NFL /NDL /NJH /NJS
           if errorlevel 8 (
             echo SCRenamePyの配置に失敗しました。
             exit /b 1
           )
-          if not exist package\\exe_files\\SCRenamePy\\SCRename.py (
+          if not exist package\exe_files\SCRenamePy\SCRename.py (
             echo SCRename.pyの配置を確認できません。
             exit /b 1
           )
 
           rem join_logo + JL
-          for /r deps\\join_logo %%f in (join_logo_scp.exe) do copy /y "%%f" package\\exe_files
-          if exist deps\\join_logo\\join_logo_scp\\JL robocopy deps\\join_logo\\join_logo_scp\\JL package\\JL /E /NFL /NDL /NJH /NJS
+          for /r deps\join_logo %%f in (join_logo_scp.exe) do if exist "%%f" copy /y "%%f" package\exe_files
+          if exist deps\join_logo\join_logo_scp\JL robocopy deps\join_logo\join_logo_scp\JL package\JL /E /NFL /NDL /NJH /NJS
 
           rem AviSynthCUDAFilters
-          if exist deps\\avscuda\\plugins64 (
-            robocopy deps\\avscuda\\plugins64 package\\exe_files\\plugins64 /E /NFL /NDL /NJH /NJS
+          if exist deps\avscuda\plugins64 (
+            robocopy deps\avscuda\plugins64 package\exe_files\plugins64 /E /NFL /NDL /NJH /NJS
           ) else (
-            robocopy deps\\avscuda package\\exe_files\\plugins64 /E /NFL /NDL /NJH /NJS
+            robocopy deps\avscuda package\exe_files\plugins64 /E /NFL /NDL /NJH /NJS
           )
 
           rem avisynth plugins64
-          robocopy deps\\nnedi3 package\\exe_files\\plugins64 /E /NFL /NDL /NJH /NJS
+          robocopy deps\nnedi3 package\exe_files\plugins64 /E /NFL /NDL /NJH /NJS
 
           rem フィルタプレビューのCLIエンジン(単一実行ファイル)はサーバーと同じ場所へ置く
-          7z e -y -o"%GITHUB_WORKSPACE%\package\exe_files" deps\\hwenc_vpp_preview_cli.zip HWEncVppPreviewCLI.exe
-          if not exist package\\exe_files\\HWEncVppPreviewCLI.exe (
-            echo ERROR: package\\exe_files\\HWEncVppPreviewCLI.exe がありません。
+          7z e -y -o"%GITHUB_WORKSPACE%\package\exe_files" deps\hwenc_vpp_preview_cli.zip HWEncVppPreviewCLI.exe
+          if not exist package\exe_files\HWEncVppPreviewCLI.exe (
+            echo ERROR: package\exe_files\HWEncVppPreviewCLI.exe がありません。
             exit /b 1
           )
 
           rem lsmash tools (muxer_x64.exe -> muxer.exe, timelineeditor_x64.exe -> timelineeditor.exe)
-          for /r deps\\lsmash %%f in (muxer_x64.exe) do copy /y "%%f" package\\exe_files\\muxer.exe
-          for /r deps\\lsmash %%f in (timelineeditor_x64.exe) do copy /y "%%f" package\\exe_files\\timelineeditor.exe
+          for /r deps\lsmash %%f in (muxer_x64.exe) do if exist "%%f" copy /y "%%f" package\exe_files\muxer.exe
+          for /r deps\lsmash %%f in (timelineeditor_x64.exe) do if exist "%%f" copy /y "%%f" package\exe_files\timelineeditor.exe
 
           rem deps (dlls)
-          if exist lib\\x64\\*.dll copy /y lib\\x64\\*.dll package\\exe_files
+          if exist lib\x64\*.dll copy /y lib\x64\*.dll package\exe_files
 
           rem encoders
-          for /r deps\\x264 %%f in (*.exe) do copy /y "%%f" package\\exe_files
-          for /r deps\\x265 %%f in (*.exe) do copy /y "%%f" package\\exe_files
-          for /r deps\\svt %%f in (*.exe) do copy /y "%%f" package\\exe_files
-          for /r deps\\x262 %%f in (*.exe) do copy /y "%%f" package\\exe_files
-          if not exist package\\exe_files\\x262*.exe (
+          for /r deps\x264 %%f in (*.exe) do if exist "%%f" copy /y "%%f" package\exe_files
+          for /r deps\x265 %%f in (*.exe) do if exist "%%f" copy /y "%%f" package\exe_files
+          for /r deps\svt %%f in (*.exe) do if exist "%%f" copy /y "%%f" package\exe_files
+          for /r deps\x262 %%f in (*.exe) do if exist "%%f" copy /y "%%f" package\exe_files
+          if not exist package\exe_files\x262*.exe (
             echo ERROR: x262の実行ファイルをパッケージへ配置できませんでした。
             exit /b 1
           )
 
           rem ffmpeg dlls (search recursively - structure may vary)
-          for /r ffmpeg_lgpl %%d in (avcodec-61.dll avdevice-61.dll avfilter-10.dll avformat-61.dll avutil-59.dll swresample-5.dll swscale-8.dll) do if exist "%%d" copy /y "%%d" package\\exe_files
+          for /r ffmpeg_lgpl %%d in (avcodec-61.dll avdevice-61.dll avfilter-10.dll avformat-61.dll avutil-59.dll swresample-5.dll swscale-8.dll) do if exist "%%d" copy /y "%%d" package\exe_files
           echo --- package contents (after Assemble) ---
           tree /f package
 
@@ -300,12 +300,12 @@ jobs:
         run: |
           cd /d %GITHUB_WORKSPACE%
           rem 廃止済みツールが配布物へ再混入していないことを保証する
-          if exist package\\exe_files\\BatchHashChecker.exe (
-            echo ERROR: package\\exe_files\\BatchHashChecker.exe remains in package.
+          if exist package\exe_files\BatchHashChecker.exe (
+            echo ERROR: package\exe_files\BatchHashChecker.exe remains in package.
             exit /b 1
           )
-          if not exist package\\exe_files\\nicojk_ass.exe (
-            echo ERROR: package\\exe_files\\nicojk_ass.exe がありません。
+          if not exist package\exe_files\nicojk_ass.exe (
+            echo ERROR: package\exe_files\nicojk_ass.exe がありません。
             exit /b 1
           )
           set "PKG_NAME=Amatsukaze_${{ steps.version.outputs.version_name }}.7z"
