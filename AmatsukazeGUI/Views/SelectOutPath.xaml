@@ -130,7 +130,8 @@
             </TextBlock>
         </Button>
         <Button Margin="2" Height="Auto" Command="{Binding FilterAdjustCommand, Mode=OneWay}">
-            <TextBlock TextAlignment="Center" TextWrapping="Wrap">
+            <!-- 使用頻度が低いため文字を少し薄くする。色を固定せず不透明度で下げ、各テーマとホバー時の文字色に追従させる。 -->
+            <TextBlock TextAlignment="Center" TextWrapping="Wrap" Opacity="0.7">
                 <Run FontSize="20" Text="フィルタ調整"/><LineBreak/><Run Text="TS解析後、一時ファイルを残してフィルタ調整画面を開きます。"/>
             </TextBlock>
         </Button>
