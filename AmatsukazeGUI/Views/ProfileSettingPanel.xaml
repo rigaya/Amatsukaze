@@ -41,8 +41,6 @@
             </Button>
             <Button DockPanel.Dock="Right" Content="新規" Margin="2" Height="30" ToolTip="現在のプロファイルをコピーして新しいプロファイルを作成します" Command="{Binding NewProfileCommand}"/>
             <Button DockPanel.Dock="Right" Content="適用" Margin="2" Height="30" Width="60" Command="{Binding ApplyProfileCommand}" />
-            <Button DockPanel.Dock="Right" Content="フィルタ調整" Margin="2" Padding="6,0" Height="30"
-                    Click="OpenFilterAdjust" ToolTip="編集中のプロファイルは適用してから開いてください"/>
             <ComboBox ItemsSource="{Binding Model.ProfileListView}" Margin="5" Height="22" SelectedItem="{Binding Model.SelectedProfile, Mode=TwoWay}"/>
         </DockPanel>
 
@@ -437,15 +435,19 @@
                 <TextBlock Grid.Row="17" HorizontalAlignment="Left" Text="フィルタ設定" VerticalAlignment="Center"/>
                 <StackPanel Grid.Row="17" Grid.Column="1" Margin="10,4"
                             IsEnabled="{Binding Model.SelectedProfile.Mpeg2PartialConstraintsEnabled}">
-                    <ComboBox Margin="0,3" Height="22"
-                              ItemsSource="{Binding Model.SelectedProfile.FilterOptions}"
-                              SelectedIndex="{Binding Model.SelectedProfile.FilterOption, Mode=TwoWay}">
-                        <ComboBox.ItemTemplate>
-                            <DataTemplate>
-                                <TextBlock Text="{Binding Name}"/>
-                            </DataTemplate>
-                        </ComboBox.ItemTemplate>
-                    </ComboBox>
+                    <DockPanel>
+                        <Button DockPanel.Dock="Right" Content="フィルタ調整" Margin="6,3,0,3" Padding="6,0" Height="22"
+                                Click="OpenFilterAdjust" ToolTip="実際の映像でフィルタ設定を調整します。編集中のプロファイルは適用してから開いてください"/>
+                        <ComboBox Margin="0,3" Height="22"
+                                  ItemsSource="{Binding Model.SelectedProfile.FilterOptions}"
+                                  SelectedIndex="{Binding Model.SelectedProfile.FilterOption, Mode=TwoWay}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Name}"/>
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                    </DockPanel>
                     <ContentPresenter Content="{Binding Model.SelectedProfile.SelectedFilterOption}">
                         <ContentPresenter.Resources>
                             <DataTemplate DataType="{x:Type m:DisplayFilterSetting}">

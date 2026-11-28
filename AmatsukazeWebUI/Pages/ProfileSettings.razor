@@ -19,8 +19,6 @@
         }
     </select>
     <button class="btn btn-primary" @onclick="ApplyAsync" disabled="@(!_isDirty || _loading || _draftJson == null)">適用</button>
-    <button class="btn btn-secondary" @onclick="OpenFilterAdjust" disabled="@(_isDirty || _loading || _draftJson == null)"
-            title="@(_isDirty ? "適用してから開いてください" : null)">フィルタ調整</button>
     <button class="btn btn-secondary" @onclick="OpenNewDialog" disabled="@(_loading || _profiles.Count == 0)">新規</button>
     <button class="btn btn-secondary" @onclick="OpenRenameDialog" disabled="@(_loading || _profiles.Count == 0)">リネーム</button>
     <button class="btn btn-danger" @onclick="DeleteAsync" disabled="@(_loading || _profiles.Count == 0)">削除</button>
@@ -345,6 +343,9 @@ else
                             <option value="@item.Value" selected="@item.Selected">@item.Label</option>
                         }
                     </select>
+                    <button class="btn btn-sm btn-secondary" style="margin-left: 6px;" @onclick="OpenFilterAdjust"
+                            disabled="@(_isDirty || _draftJson == null || GetBoolValue("Mpeg2Partial"))"
+                            title="@(_isDirty ? "適用してから開いてください" : "実際の映像でフィルタ設定を調整します")">フィルタ調整</button>
                 </td>
             </tr>
             @if (IsCustomFilter())
